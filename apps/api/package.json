@@ -1,0 +1,49 @@
+{
+  "name": "@docai/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@docai/ai": "workspace:*",
+    "@docai/database": "workspace:*",
+    "@docai/document": "workspace:*",
+    "@docai/shared": "workspace:*",
+    "@hocuspocus/server": "^2.15.2",
+    "@hocuspocus/transformer": "^2.15.2",
+    "@tiptap/core": "^2.11.7",
+    "@tiptap/pm": "^2.11.7",
+    "@nestjs/common": "^11.1.0",
+    "@nestjs/config": "^4.0.2",
+    "@nestjs/core": "^11.1.0",
+    "@nestjs/platform-express": "^11.1.0",
+    "@supabase/supabase-js": "^2.49.4",
+    "ai": "^5.0.0",
+    "cors": "^2.8.5",
+    "mammoth": "^1.9.0",
+    "multer": "^2.0.0",
+    "pdf-parse": "^1.1.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "ws": "^8.18.1",
+    "xlsx": "^0.18.5",
+    "yjs": "^13.6.24",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@docai/config": "workspace:*",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.1",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.14.1",
+    "@types/pdf-parse": "^1.1.4",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3"
+  }
+}

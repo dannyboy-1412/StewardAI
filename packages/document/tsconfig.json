@@ -1,0 +1,10 @@
+{
+  "extends": "@docai/config/tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM"],
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src", "src/**/*.test.ts"]
+}

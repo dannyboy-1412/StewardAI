@@ -1,0 +1,22 @@
+{
+  "name": "docai",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:web": "turbo run dev --filter=@docai/web",
+    "dev:api": "turbo run dev --filter=@docai/api",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "pnpm --filter @docai/database generate",
+    "db:migrate": "pnpm --filter @docai/database migrate",
+    "db:seed": "pnpm --filter @docai/database seed"
+  },
+  "devDependencies": {
+    "prettier": "^3.5.3",
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3"
+  }
+}

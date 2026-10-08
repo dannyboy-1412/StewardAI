@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Fraunces", ui-serif, Georgia, serif;
+  --color-ink: #14291f;
+  --color-forest: #1b3d32;
+  --color-forest-2: #244c3e;
+  --color-sage: #dce8dc;
+  --color-mist: #eef4ec;
+  --color-leaf: #2f6a55;
+  --color-muted: #5d7468;
+  --color-line: #d3e0d4;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: #e8efe6;
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+.serif {
+  font-family: var(--font-serif);
+  font-optical-sizing: auto;
+}
+
+.editor-surface .ProseMirror {
+  outline: none;
+  min-height: 70vh;
+  font-size: 17px;
+  line-height: 1.7;
+  color: #1b2b24;
+}
+
+.editor-surface .ProseMirror h1 {
+  font-family: var(--font-serif);
+  font-size: 2.1rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  margin: 0.4em 0 0.6em;
+}
+
+.editor-surface .ProseMirror h2 {
+  font-family: var(--font-serif);
+  font-size: 1.45rem;
+  font-weight: 600;
+  margin: 1.4em 0 0.45em;
+}
+
+.editor-surface .ProseMirror h3 {
+  font-size: 1.1rem;
+  font-weight: 650;
+  margin: 1.2em 0 0.35em;
+}
+
+.editor-surface .ProseMirror p {
+  margin: 0.55em 0;
+}
+
+.editor-surface .ProseMirror ul,
+.editor-surface .ProseMirror ol {
+  padding-left: 1.4em;
+  margin: 0.5em 0;
+}
+
+.editor-surface .ProseMirror blockquote {
+  border-left: 3px solid var(--color-leaf);
+  padding-left: 1rem;
+  color: var(--color-muted);
+  margin: 1em 0;
+}
+
+.editor-surface .ProseMirror pre {
+  background: #13261e;
+  color: #e8efe6;
+  padding: 1rem;
+  border-radius: 12px;
+  overflow-x: auto;
+}
+
+.editor-surface .ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+  font-size: 0.95rem;
+}
+
+.editor-surface .ProseMirror th,
+.editor-surface .ProseMirror td {
+  border: 1px solid #c9d7cb;
+  padding: 0.55rem 0.7rem;
+  min-width: 80px;
+}
+
+.editor-surface .ProseMirror th {
+  background: #f3f7f2;
+  font-weight: 650;
+}
+
+.editor-surface .ProseMirror img {
+  max-width: 100%;
+  border-radius: 12px;
+}
+
+.editor-surface .ProseMirror .equation-block {
+  background: #f4f8f3;
+  border: 1px dashed #b7cbb9;
+  padding: 0.8rem;
+  border-radius: 10px;
+  text-align: center;
+  font-family: ui-serif, Georgia, serif;
+}
+
+.editor-surface .ProseMirror span[data-citation] {
+  color: var(--color-leaf);
+  font-size: 0.85em;
+  font-weight: 650;
+}
+
+.editor-surface .ProseMirror .is-ai-highlight {
+  background: #cfe9c8;
+  border-radius: 4px;
+  animation: fadeHighlight 2.4s ease forwards;
+}
+
+@keyframes fadeHighlight {
+  0% { background: #cfe9c8; }
+  100% { background: transparent; }
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #8aa090;
+  pointer-events: none;
+  height: 0;
+}
