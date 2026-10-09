@@ -7,19 +7,26 @@ import {
   searchDocument,
   toAgentView,
   validateOp,
+  type BlockPatch,
   type DocumentOp,
   type JSONContent,
 } from '@docai/document'
+
+export type PatchPayload = {
+  op: DocumentOp
+  patches: BlockPatch[]
+  affectedBlockIds: string[]
+}
 
 export type WorkingDocument = {
   getDoc: () => JSONContent
   setDoc: (doc: JSONContent) => void
   recordOp: (op: DocumentOp) => void
-  emitOp: (op: DocumentOp) => void
+  emitPatch: (payload: PatchPayload) => void
   readFile: (fileId: string) => Promise<string>
 }
 
-function applyValidated(working: WorkingDocument, raw: unknown): string {
+export function applyValidated(working: WorkingDocument, raw: unknown): string {
   const op = parseDocumentOp(raw)
   const errors = validateOp(working.getDoc(), op)
   if (errors.length > 0) {
@@ -28,7 +35,11 @@ function applyValidated(working: WorkingDocument, raw: unknown): string {
   const result = applyOp(working.getDoc(), op)
   working.setDoc(result.doc)
   working.recordOp(op)
-  working.emitOp(op)
+  working.emitPatch({
+    op,
+    patches: result.patches,
+    affectedBlockIds: result.affectedBlockIds,
+  })
   return JSON.stringify({
     ok: true,
     affectedBlockIds: result.affectedBlockIds,
@@ -104,14 +115,60 @@ export function createDocumentTools(working: WorkingDocument, writable: boolean)
       execute: async (input) => applyValidated(working, { type: 'moveBlocks', ...input }),
     }),
     formatBlocks: tool({
-      description: 'Change block type, heading level, or alignment.',
+      description:
+        'Change block type, heading level, alignment, paragraph style, line height, spacing, or indent. Use this instead of replaceBlocks when wording should stay the same.',
       inputSchema: z.object({
         blockIds: z.array(z.string()).min(1),
         blockType: z.enum(['paragraph', 'heading', 'blockquote', 'codeBlock']).optional(),
-        headingLevel: z.number().int().min(1).max(3).optional(),
+        headingLevel: z.number().int().min(1).max(6).optional(),
         alignment: z.enum(['left', 'center', 'right', 'justify']).optional(),
+        styleName: z.enum(['title', 'subtitle']).nullable().optional(),
+        lineHeight: z.string().min(1).optional(),
+        spaceBefore: z.number().optional(),
+        spaceAfter: z.number().optional(),
+        indent: z.number().int().min(0).max(8).optional(),
       }),
       execute: async (input) => applyValidated(working, { type: 'formatBlocks', ...input }),
+    }),
+    styleText: tool({
+      description:
+        'Apply font, size, color, highlight, or emphasis to text in blocks. Optionally target an exact substring with match.',
+      inputSchema: z.object({
+        blockIds: z.array(z.string()).min(1),
+        match: z.string().min(1).optional(),
+        fontFamily: z.string().min(1).optional(),
+        fontSize: z.string().min(1).optional(),
+        color: z.string().min(1).optional(),
+        highlight: z.string().min(1).optional(),
+        bold: z.boolean().optional(),
+        italic: z.boolean().optional(),
+        underline: z.boolean().optional(),
+        strike: z.boolean().optional(),
+        subscript: z.boolean().optional(),
+        superscript: z.boolean().optional(),
+      }),
+      execute: async (input) => applyValidated(working, { type: 'styleText', ...input }),
+    }),
+    clearFormatting: tool({
+      description: 'Remove marks and paragraph styling from blocks, keeping the wording.',
+      inputSchema: z.object({
+        blockIds: z.array(z.string()).min(1),
+      }),
+      execute: async (input) => applyValidated(working, { type: 'clearFormatting', ...input }),
+    }),
+    insertPageBreak: tool({
+      description: 'Insert a page break after a block, or at the end if afterBlockId is omitted.',
+      inputSchema: z.object({
+        afterBlockId: z.string().nullable().optional(),
+      }),
+      execute: async (input) => applyValidated(working, { type: 'insertPageBreak', ...input }),
+    }),
+    insertTableOfContents: tool({
+      description: 'Insert a table of contents block that lists document headings.',
+      inputSchema: z.object({
+        afterBlockId: z.string().nullable().optional(),
+      }),
+      execute: async (input) => applyValidated(working, { type: 'insertTableOfContents', ...input }),
     }),
     createTable: tool({
       description: 'Insert a table.',
@@ -141,7 +198,7 @@ export function createDocumentTools(working: WorkingDocument, writable: boolean)
       inputSchema: z.object({
         afterBlockId: z.string().nullable().optional(),
         heading: z.string().min(1),
-        level: z.number().int().min(1).max(3).default(1),
+        level: z.number().int().min(1).max(6).default(1),
         markdown: z.string().default(''),
       }),
       execute: async (input) => applyValidated(working, { type: 'createSection', ...input }),

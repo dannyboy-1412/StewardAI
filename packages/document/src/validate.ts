@@ -24,6 +24,8 @@ export function validateOp(doc: JSONContent, op: DocumentOp): ValidationError[] 
     case 'replaceBlocks':
     case 'deleteBlocks':
     case 'formatBlocks':
+    case 'styleText':
+    case 'clearFormatting':
       for (const id of op.blockIds) requireId(id)
       break
     case 'moveBlocks':
@@ -34,6 +36,8 @@ export function validateOp(doc: JSONContent, op: DocumentOp): ValidationError[] 
       }
       break
     case 'createTable':
+    case 'insertPageBreak':
+    case 'insertTableOfContents':
       if (op.afterBlockId) requireId(op.afterBlockId)
       break
     case 'updateTableCells': {
@@ -50,6 +54,10 @@ export function validateOp(doc: JSONContent, op: DocumentOp): ValidationError[] 
     case 'addCitation':
       requireId(op.blockId)
       break
+    default: {
+      const _exhaustive: never = op
+      return _exhaustive
+    }
   }
 
   return errors

@@ -6,9 +6,25 @@ export const createDocumentBodySchema = z.object({
   projectId: z.string().uuid().nullable().optional(),
 })
 
+export const pageSettingsSchema = z.object({
+  paperSize: z.enum(['A4', 'Letter']).default('A4'),
+  orientation: z.enum(['portrait', 'landscape']).default('portrait'),
+  marginTop: z.number().min(0).max(4).default(1),
+  marginBottom: z.number().min(0).max(4).default(1),
+  marginLeft: z.number().min(0).max(4).default(1),
+  marginRight: z.number().min(0).max(4).default(1),
+  pageColor: z.string().min(1).max(32).default('#ffffff'),
+  headerText: z.string().max(200).default(''),
+  footerText: z.string().max(200).default(''),
+  showPageNumbers: z.boolean().default(true),
+})
+
+export type PageSettingsInput = z.infer<typeof pageSettingsSchema>
+
 export const updateDocumentBodySchema = z.object({
   title: z.string().min(1).max(200).optional(),
   projectId: z.string().uuid().nullable().optional(),
+  pageSettings: pageSettingsSchema.optional(),
 })
 
 export const createProjectBodySchema = z.object({

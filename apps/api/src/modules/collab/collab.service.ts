@@ -4,15 +4,25 @@ import { WebSocketServer } from 'ws'
 import type { IncomingMessage, Server as HttpServer } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { DocumentsService } from '../documents/documents.service.js'
+import { UsersService } from '../users/users.service.js'
 import { applyYDocState, encodeYDoc, jsonToYDoc, yDocToJson } from './ydoc.js'
-import { resolveDevUser } from '../../auth/current-user.js'
+import { verifySupabaseAccessToken } from '../../auth/supabase-jwt.js'
+import type { CurrentUserRecord } from '../../auth/current-user.js'
+
+type CollabContext = { user: CurrentUserRecord }
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 @Injectable()
 export class CollabService {
   private readonly logger = new Logger(CollabService.name)
   private hocuspocus: Hocuspocus | null = null
 
-  constructor(@Inject(DocumentsService) private readonly documents: DocumentsService) {}
+  constructor(
+    @Inject(DocumentsService) private readonly documents: DocumentsService,
+    @Inject(UsersService) private readonly users: UsersService,
+  ) {}
 
   attach(httpServer: HttpServer) {
     const origins = (process.env.WEB_ORIGINS ?? 'http://localhost:3000')
@@ -21,8 +31,25 @@ export class CollabService {
 
     this.hocuspocus = new Hocuspocus({
       debounce: 2000,
-      onLoadDocument: async ({ documentName, document }) => {
-        const user = resolveDevUser()
+      onAuthenticate: async ({ token, documentName }) => {
+        if (!token) throw new Error('Unauthorized')
+        if (!UUID_PATTERN.test(documentName)) throw new Error('Forbidden')
+        let verified: CurrentUserRecord
+        try {
+          verified = await verifySupabaseAccessToken(token)
+        } catch {
+          throw new Error('Unauthorized')
+        }
+        const user = await this.users.ensureUser(verified)
+        try {
+          await this.documents.get(user.id, documentName)
+        } catch {
+          throw new Error('Forbidden')
+        }
+        return { user } satisfies CollabContext
+      },
+      onLoadDocument: async ({ documentName, document, context }) => {
+        const user = (context as CollabContext).user
         const record = await this.documents.get(user.id, documentName)
         if (record.ydocState) {
           applyYDocState(document, record.ydocState)
@@ -32,8 +59,8 @@ export class CollabService {
         }
         return document
       },
-      onStoreDocument: async ({ documentName, document }) => {
-        const user = resolveDevUser()
+      onStoreDocument: async ({ documentName, document, context }) => {
+        const user = (context as CollabContext).user
         const json = yDocToJson(document)
         await this.documents.update(user.id, documentName, {
           contentJson: json,

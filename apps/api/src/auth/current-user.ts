@@ -1,5 +1,4 @@
-import { createParamDecorator, type ExecutionContext } from '@nestjs/common'
-import { DEV_USER_ID } from '@docai/shared'
+import { UnauthorizedException, createParamDecorator, type ExecutionContext } from '@nestjs/common'
 
 export type CurrentUserRecord = {
   id: string
@@ -7,17 +6,12 @@ export type CurrentUserRecord = {
   name: string
 }
 
-export function resolveDevUser(): CurrentUserRecord {
-  return {
-    id: process.env.DEV_USER_ID ?? DEV_USER_ID,
-    email: 'dev@writee.local',
-    name: 'Dev User',
-  }
-}
-
 export const CurrentUser = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): CurrentUserRecord => {
     const request = ctx.switchToHttp().getRequest<{ user?: CurrentUserRecord }>()
-    return request.user ?? resolveDevUser()
+    if (!request.user) {
+      throw new UnauthorizedException()
+    }
+    return request.user
   },
 )

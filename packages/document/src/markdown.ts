@@ -71,19 +71,36 @@ function inlineToContent(tokens: Token[] | undefined): JSONContent[] | undefined
   return content.length ? content : undefined
 }
 
+function listItemContent(item: Tokens.ListItem): JSONContent[] {
+  if (item.tokens?.length) {
+    return markdownToNodesFromTokens(item.tokens).map((node) =>
+      node.type === 'paragraph' || node.type === 'bulletList' || node.type === 'orderedList' || node.type === 'taskList'
+        ? node
+        : paragraph(textFromTokens(item.tokens)),
+    )
+  }
+  return [paragraph(item.text)]
+}
+
 function listNode(token: Tokens.List): JSONContent {
+  const isTask = token.items.some((item) => item.task)
+  if (isTask) {
+    return {
+      type: 'taskList',
+      attrs: { id: createBlockId() },
+      content: token.items.map((item) => ({
+        type: 'taskItem',
+        attrs: { checked: Boolean(item.checked) },
+        content: listItemContent(item),
+      })),
+    }
+  }
   return {
     type: token.ordered ? 'orderedList' : 'bulletList',
     attrs: { id: createBlockId(), start: token.start || undefined },
     content: token.items.map((item) => ({
       type: 'listItem',
-      content: item.tokens?.length
-        ? markdownToNodesFromTokens(item.tokens).map((node) =>
-            node.type === 'paragraph' || node.type === 'bulletList' || node.type === 'orderedList'
-              ? node
-              : paragraph(textFromTokens(item.tokens)),
-          )
-        : [paragraph(item.text)],
+      content: listItemContent(item),
     })),
   }
 }
@@ -104,7 +121,7 @@ function markdownToNodesFromTokens(tokens: Token[]): JSONContent[] {
         const headingToken = token as Tokens.Heading
         nodes.push({
           type: 'heading',
-          attrs: { id: createBlockId(), level: Math.min(headingToken.depth, 3) },
+          attrs: { id: createBlockId(), level: Math.min(headingToken.depth, 6) },
           content: inlineToContent(headingToken.tokens),
         })
         break
@@ -200,6 +217,14 @@ function nodeToMarkdown(node: JSONContent): string {
       return (node.content ?? [])
         .map((item, index) => `${index + 1}. ${textOfNode(item)}`)
         .join('\n')
+    case 'taskList':
+      return (node.content ?? [])
+        .map((item) => `- [${item.attrs?.checked ? 'x' : ' '}] ${textOfNode(item)}`)
+        .join('\n')
+    case 'pageBreak':
+      return '\\pagebreak'
+    case 'tableOfContents':
+      return '[Table of contents]'
     case 'table':
       return tableToMarkdown(node)
     case 'horizontalRule':

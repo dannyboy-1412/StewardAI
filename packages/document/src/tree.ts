@@ -19,14 +19,18 @@ export function cloneDoc(doc: JSONContent): JSONContent {
   return structuredClone(doc)
 }
 
-export function ensureDoc(doc: JSONContent | null | undefined): JSONContent {
-  if (!doc || doc.type !== 'doc') {
+export function ensureDoc(doc: unknown): JSONContent {
+  if (!doc || typeof doc !== 'object' || !('type' in doc)) {
     return emptyDoc()
   }
-  if (!doc.content || doc.content.length === 0) {
+  const record = doc as JSONContent
+  if (record.type !== 'doc') {
     return emptyDoc()
   }
-  return doc
+  if (!record.content || record.content.length === 0) {
+    return emptyDoc()
+  }
+  return record
 }
 
 export function topLevelBlocks(doc: JSONContent): JSONContent[] {

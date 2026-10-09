@@ -13,6 +13,8 @@
     "@docai/document": "workspace:*",
     "@docai/shared": "workspace:*",
     "@hocuspocus/provider": "^2.15.2",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.3",
     "@tiptap/core": "^2.11.7",
     "@tiptap/extension-bubble-menu": "^2.11.7",
     "@tiptap/extension-collaboration": "^2.11.7",
@@ -23,6 +25,7 @@
     "next": "^15.3.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "tiptap-pagination-plus": "^2.1.0",
     "y-prosemirror": "^1.3.7",
     "yjs": "^13.6.24"
   },

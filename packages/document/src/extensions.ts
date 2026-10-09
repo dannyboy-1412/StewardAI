@@ -1,9 +1,8 @@
-import { Extension, Node, Mark } from '@tiptap/core'
+import { Node, Mark } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Underline from '@tiptap/extension-underline'
 import Placeholder from '@tiptap/extension-placeholder'
-import Image from '@tiptap/extension-image'
 import { Table } from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableHeader from '@tiptap/extension-table-header'
@@ -13,7 +12,31 @@ import { Color } from '@tiptap/extension-color'
 import { TextStyle } from '@tiptap/extension-text-style'
 import Highlight from '@tiptap/extension-highlight'
 import UniqueID from '@tiptap/extension-unique-id'
+import FontFamily from '@tiptap/extension-font-family'
+import Subscript from '@tiptap/extension-subscript'
+import Superscript from '@tiptap/extension-superscript'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
+import CharacterCount from '@tiptap/extension-character-count'
+import Typography from '@tiptap/extension-typography'
 import { BLOCK_TYPES_WITH_ID } from './types.js'
+import { FontSize } from './extensions/fontSize.js'
+import { LineHeight } from './extensions/lineHeight.js'
+import { ParagraphSpacing } from './extensions/paragraphSpacing.js'
+import { Indent } from './extensions/indent.js'
+import { ParagraphStyle } from './extensions/paragraphStyle.js'
+import { PageBreak } from './extensions/pageBreak.js'
+import { TableOfContents } from './extensions/tableOfContents.js'
+import { ResizableImage } from './extensions/resizableImage.js'
+
+export { FontSize } from './extensions/fontSize.js'
+export { LineHeight } from './extensions/lineHeight.js'
+export { ParagraphSpacing } from './extensions/paragraphSpacing.js'
+export { Indent } from './extensions/indent.js'
+export { ParagraphStyle } from './extensions/paragraphStyle.js'
+export { PageBreak } from './extensions/pageBreak.js'
+export { TableOfContents } from './extensions/tableOfContents.js'
+export { ResizableImage } from './extensions/resizableImage.js'
 
 export const Equation = Node.create({
   name: 'equation',
@@ -57,48 +80,47 @@ export const Citation = Mark.create({
   },
 })
 
-export const FontSize = Extension.create({
-  name: 'fontSize',
-  addGlobalAttributes() {
-    return [
-      {
-        types: ['textStyle'],
-        attributes: {
-          fontSize: {
-            default: null,
-            parseHTML: (element) => element.style.fontSize || null,
-            renderHTML: (attributes) =>
-              attributes.fontSize ? { style: `font-size: ${attributes.fontSize}` } : {},
-          },
-        },
-      },
-    ]
-  },
-})
-
 export function createEditorExtensions(options?: {
   placeholder?: string
   history?: boolean
   uniqueId?: boolean
+  resolveImageSrc?: (src: string) => Promise<string>
 }) {
   return [
     StarterKit.configure({
       history: options?.history === false ? false : undefined,
-      heading: { levels: [1, 2, 3] },
+      heading: { levels: [1, 2, 3, 4, 5, 6] },
       codeBlock: { languageClassPrefix: 'language-' },
     }),
     Underline,
     Link.configure({ openOnClick: false, autolink: true }),
-    Image.configure({ inline: false, allowBase64: false }),
+    ResizableImage.configure({
+      inline: false,
+      allowBase64: false,
+      resolveSrc: options?.resolveImageSrc,
+    }),
     Table.configure({ resizable: true }),
     TableRow,
     TableHeader,
     TableCell,
-    TextAlign.configure({ types: ['heading', 'paragraph'] }),
+    TaskList,
+    TaskItem.configure({ nested: true }),
+    TextAlign.configure({ types: ['heading', 'paragraph', 'listItem', 'taskItem', 'image'] }),
     TextStyle,
-    Color,
-    Highlight,
+    FontFamily,
     FontSize,
+    Color,
+    Highlight.configure({ multicolor: true }),
+    Subscript,
+    Superscript,
+    Typography,
+    CharacterCount,
+    LineHeight,
+    ParagraphSpacing,
+    Indent,
+    ParagraphStyle,
+    PageBreak,
+    TableOfContents,
     Placeholder.configure({
       placeholder: options?.placeholder ?? 'Start writing, or ask AI to draft this page…',
     }),

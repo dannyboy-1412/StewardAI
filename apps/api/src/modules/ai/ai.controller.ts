@@ -1,10 +1,10 @@
-import { Body, Controller, Get, Inject, Param, Post, Req, Res } from '@nestjs/common'
+import { Body, Controller, Get, Inject, Param, ParseUUIDPipe, Post, Req, Res } from '@nestjs/common'
 import type { Request, Response } from 'express'
 import {
   createUIMessageStream,
   pipeUIMessageStreamToResponse,
 } from 'ai'
-import { aiRunBodySchema } from '@docai/shared'
+import { aiRunBodySchema, STREAM_EVENT } from '@docai/shared'
 import type { JSONContent } from '@docai/document'
 import { runDocumentAgent } from '@docai/ai'
 import { CurrentUser, type CurrentUserRecord } from '../../auth/current-user.js'
@@ -19,14 +19,14 @@ export class AiController {
   ) {}
 
   @Get('runs')
-  list(@Param('id') id: string) {
-    return this.documents.listAiRuns(id)
+  list(@CurrentUser() user: CurrentUserRecord, @Param('id', ParseUUIDPipe) id: string) {
+    return this.documents.listAiRuns(user.id, id)
   }
 
   @Post('runs')
   async run(
     @CurrentUser() user: CurrentUserRecord,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() body: unknown,
     @Req() req: Request,
     @Res() res: Response,
@@ -60,9 +60,9 @@ export class AiController {
 
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
-        writer.write({ type: 'data-run-started', data: { runId: run.id } })
+        writer.write({ type: STREAM_EVENT.runStarted, data: { runId: run.id } })
         const heartbeat = setInterval(() => {
-          writer.write({ type: 'data-heartbeat', data: { t: Date.now() } })
+          writer.write({ type: STREAM_EVENT.heartbeat, data: { t: Date.now() } })
         }, 20_000)
         try {
           if (!process.env.OPENROUTER_API_KEY) {
@@ -77,22 +77,37 @@ export class AiController {
                 position: 'end' as const,
                 markdown,
               }
-              writer.write({ type: 'data-op', data: op })
               const next = applyOp(snapshot, op)
-              await this.documents.update(user.id, id, { contentJson: next.doc })
+              writer.write({
+                type: STREAM_EVENT.patch,
+                data: {
+                  op,
+                  patches: next.patches,
+                  affectedBlockIds: next.affectedBlockIds,
+                },
+              })
               await this.documents.finishAiRun(run.id, { status: 'completed', ops: [op] })
+              writer.write({
+                type: 'text-delta',
+                id: 'demo',
+                delta: 'Applied a demo edit. Set OPENROUTER_API_KEY for the full agent.',
+              })
+              writer.write({
+                type: STREAM_EVENT.runFinished,
+                data: { runId: run.id, demo: true, doc: next.doc },
+              })
             } else {
               await this.documents.finishAiRun(run.id, { status: 'completed', ops: [] })
+              writer.write({
+                type: 'text-delta',
+                id: 'demo',
+                delta: 'Connect OPENROUTER_API_KEY to ask questions about the document.',
+              })
+              writer.write({
+                type: STREAM_EVENT.runFinished,
+                data: { runId: run.id, demo: true, doc: snapshot },
+              })
             }
-            writer.write({
-              type: 'text-delta',
-              id: 'demo',
-              delta:
-                input.mode === 'ask'
-                  ? 'Connect OPENROUTER_API_KEY to ask questions about the document.'
-                  : 'Applied a demo edit. Set OPENROUTER_API_KEY for the full agent.',
-            })
-            writer.write({ type: 'data-run-finished', data: { runId: run.id, demo: true } })
             return
           }
           const { model, fastModel } = this.models.getModels()
@@ -117,16 +132,13 @@ export class AiController {
           })
           writer.merge(agent.result.toUIMessageStream())
           await agent.result.text
-          if (input.mode === 'edit') {
-            await this.documents.update(user.id, id, { contentJson: agent.getDoc() })
-          }
           await this.documents.finishAiRun(run.id, {
             status: abort.signal.aborted ? 'cancelled' : 'completed',
             ops: agent.getOps(),
           })
           writer.write({
-            type: 'data-run-finished',
-            data: { runId: run.id, opCount: agent.getOps().length },
+            type: STREAM_EVENT.runFinished,
+            data: { runId: run.id, opCount: agent.getOps().length, doc: agent.getDoc() },
           })
         } catch (error) {
           await this.documents.finishAiRun(run.id, {

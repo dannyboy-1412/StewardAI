@@ -2,12 +2,19 @@
 
 import type { Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react'
+import { NodeSelection } from '@tiptap/pm/state'
 import { useState } from 'react'
 
 const actions = [
   { label: 'Improve writing', prompt: 'Improve the writing of the selected text.' },
   { label: 'Make shorter', prompt: 'Make the selected text shorter without losing meaning.' },
   { label: 'Change tone', prompt: 'Rewrite the selected text in a more academic tone.' },
+  { label: 'Format as title', prompt: 'Format the selected blocks as Title style without changing the wording.' },
+  { label: 'Format as Heading 1', prompt: 'Turn the selected blocks into Heading 1 without changing the wording.' },
+  {
+    label: 'Use serif 12pt',
+    prompt: 'Restyle the selected text to Georgia 12pt, keeping the existing wording.',
+  },
   { label: 'Add citation', prompt: 'Add a citation to the selected passage using attached files if present.' },
   { label: 'Translate', prompt: 'Translate the selected text to English and keep formatting.' },
   { label: 'Explain this', prompt: 'Explain the selected passage.', mode: 'ask' as const },
@@ -28,6 +35,14 @@ export function SelectionPrompt({
     <BubbleMenu
       editor={editor}
       tippyOptions={{ duration: 120 }}
+      shouldShow={({ editor: current, state }) => {
+        const { selection } = state
+        return (
+          current.view.hasFocus() &&
+          !selection.empty &&
+          !(selection instanceof NodeSelection)
+        )
+      }}
       className="rounded-xl border border-line bg-white p-2 shadow-lg"
     >
       <div className="flex flex-wrap gap-1">

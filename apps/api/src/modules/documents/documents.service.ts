@@ -9,9 +9,11 @@ import {
 } from '@docai/database'
 import {
   defaultTitle,
-  emptyDoc,
+  DEFAULT_PAGE_SETTINGS,
+  mergePageSettings,
   templateContent,
   type JSONContent,
+  type PageSettings,
 } from '@docai/document'
 import type { TemplateId } from '@docai/shared'
 import { DatabaseService } from '../../infrastructure/database/database.service.js'
@@ -24,6 +26,7 @@ export type DocumentRecord = {
   title: string
   contentJson: JSONContent
   ydocState: Buffer | null
+  pageSettings: PageSettings
   createdAt: Date
   updatedAt: Date
 }
@@ -115,16 +118,25 @@ export class DocumentsService {
     return {
       ...doc,
       ydocState: doc.ydocState ? Buffer.from(doc.ydocState) : null,
+      pageSettings: mergePageSettings(doc.pageSettings),
     }
   }
 
   async create(
     userId: string,
-    input: { title?: string; templateId?: string; projectId?: string | null },
+    input: {
+      title?: string
+      templateId?: string
+      projectId?: string | null
+      contentJson?: JSONContent
+      pageSettings?: PageSettings
+    },
   ) {
+    if (input.projectId) await this.getProject(userId, input.projectId)
     const templateId = (input.templateId ?? 'blank') as TemplateId
     const title = input.title ?? defaultTitle(templateId)
-    const contentJson = templateContent(templateId)
+    const contentJson = input.contentJson ?? templateContent(templateId)
+    const pageSettings = mergePageSettings(input.pageSettings ?? DEFAULT_PAGE_SETTINGS)
     const now = new Date()
     const record: DocumentRecord = {
       id: randomUUID(),
@@ -133,6 +145,7 @@ export class DocumentsService {
       title,
       contentJson,
       ydocState: null,
+      pageSettings,
       createdAt: now,
       updatedAt: now,
     }
@@ -148,6 +161,7 @@ export class DocumentsService {
         projectId: record.projectId,
         title,
         contentJson,
+        pageSettings,
       })
       .returning()
     return inserted[0]!
@@ -161,15 +175,20 @@ export class DocumentsService {
       projectId?: string | null
       contentJson?: JSONContent
       ydocState?: Buffer | null
+      pageSettings?: PageSettings
     },
   ) {
     const existing = await this.get(userId, id)
+    if (patch.projectId) await this.getProject(userId, patch.projectId)
     const next: DocumentRecord = {
       ...existing,
       title: patch.title ?? existing.title,
       projectId: patch.projectId === undefined ? existing.projectId : patch.projectId,
       contentJson: patch.contentJson ?? existing.contentJson,
       ydocState: patch.ydocState === undefined ? existing.ydocState : patch.ydocState,
+      pageSettings: patch.pageSettings
+        ? mergePageSettings(patch.pageSettings)
+        : existing.pageSettings,
       updatedAt: new Date(),
     }
     if (!this.database.db) {
@@ -183,6 +202,7 @@ export class DocumentsService {
         projectId: next.projectId,
         contentJson: next.contentJson,
         ydocState: next.ydocState,
+        pageSettings: next.pageSettings,
         updatedAt: next.updatedAt,
       })
       .where(and(eq(documents.id, id), eq(documents.userId, userId)))
@@ -232,7 +252,8 @@ export class DocumentsService {
     return inserted[0]!
   }
 
-  async listVersions(documentId: string) {
+  async listVersions(userId: string, documentId: string) {
+    await this.get(userId, documentId)
     if (!this.database.db) {
       return [...memory.versions.values()]
         .filter((version) => version.documentId === documentId)
@@ -245,14 +266,38 @@ export class DocumentsService {
       .orderBy(desc(documentVersions.createdAt))
   }
 
+  async copy(userId: string, id: string) {
+    const doc = await this.get(userId, id)
+    return this.create(userId, {
+      title: `${doc.title} (Copy)`,
+      contentJson: doc.contentJson,
+      pageSettings: doc.pageSettings,
+    })
+  }
+
   async restoreVersion(userId: string, documentId: string, versionId: string) {
-    const versions = await this.listVersions(documentId)
+    const versions = await this.listVersions(userId, documentId)
     const version = versions.find((item) => item.id === versionId)
     if (!version) throw new NotFoundException('Version not found')
     return this.update(userId, documentId, {
       contentJson: version.contentJson as JSONContent,
       ydocState: version.ydocState ? Buffer.from(version.ydocState) : null,
     })
+  }
+
+  async getProject(userId: string, id: string) {
+    if (!this.database.db) {
+      const project = memory.projects.get(id)
+      if (!project || project.userId !== userId) throw new NotFoundException('Project not found')
+      return project
+    }
+    const rows = await this.database.db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, id), eq(projects.userId, userId)))
+    const project = rows[0]
+    if (!project) throw new NotFoundException('Project not found')
+    return project
   }
 
   async listProjects(userId: string) {
@@ -338,7 +383,8 @@ export class DocumentsService {
       .where(eq(aiRuns.id, id))
   }
 
-  async listAiRuns(documentId: string) {
+  async listAiRuns(userId: string, documentId: string) {
+    await this.get(userId, documentId)
     if (!this.database.db) {
       return [...memory.aiRuns.values()]
         .filter((run) => run.documentId === documentId)

@@ -1,0 +1,1 @@
+ALTER TABLE "documents" ADD COLUMN "page_settings" jsonb DEFAULT '{"paperSize":"A4","orientation":"portrait","marginTop":1,"marginBottom":1,"marginLeft":1,"marginRight":1,"pageColor":"#ffffff","headerText":"","footerText":"","showPageNumbers":true}'::jsonb NOT NULL;

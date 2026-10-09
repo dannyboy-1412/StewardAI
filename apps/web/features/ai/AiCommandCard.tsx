@@ -5,29 +5,6 @@ import { useRef, useState } from 'react'
 import { VoiceButton } from './VoiceButton'
 import { api, type FileRecord } from '@/lib/api'
 
-const suggestions = [
-  {
-    title: 'Create a document',
-    example: 'Write a 2,000-word report on renewable energy',
-  },
-  {
-    title: 'Edit or improve',
-    example: 'Make this section more concise',
-  },
-  {
-    title: 'Change format',
-    example: 'Add a table comparing energy sources',
-  },
-  {
-    title: 'Add content',
-    example: 'Include citations from these files',
-  },
-  {
-    title: 'Ask a question',
-    example: 'Explain this concept',
-  },
-]
-
 export function AiCommandCard({
   documentId,
   busy,
@@ -61,9 +38,8 @@ export function AiCommandCard({
   }
 
   return (
-    <div className="rounded-2xl border border-line bg-white p-4 shadow-sm">
-      <p className="mb-2 text-sm font-medium text-forest">What would you like to do?</p>
-      <div className="flex items-center gap-2 rounded-xl border border-line bg-mist/50 px-3 py-2">
+    <div>
+      <div className="flex min-w-0 items-center gap-1.5 rounded-xl border border-line bg-mist/50 px-2 py-2">
         <input
           value={instruction}
           onChange={(event) => setInstruction(event.target.value)}
@@ -74,7 +50,7 @@ export function AiCommandCard({
             }
           }}
           placeholder="Type or speak your instruction…"
-          className="flex-1 bg-transparent text-sm outline-none"
+          className="min-w-0 flex-1 bg-transparent text-sm outline-none"
           disabled={busy}
         />
         <button
@@ -113,18 +89,6 @@ export function AiCommandCard({
           ))}
         </div>
       )}
-      <div className="mt-3 space-y-1.5">
-        {suggestions.map((item) => (
-          <button
-            key={item.title}
-            className="block w-full rounded-lg px-2 py-1.5 text-left text-sm hover:bg-mist"
-            onClick={() => setInstruction(item.example)}
-          >
-            <span className="font-medium text-forest">{item.title}</span>
-            <span className="text-muted"> · {item.example}</span>
-          </button>
-        ))}
-      </div>
     </div>
   )
 }

@@ -15,7 +15,7 @@ const serif = Fraunces({
 })
 
 export const metadata: Metadata = {
-  title: 'Writee — AI-first document editor',
+  title: 'PenPal AI — AI-first document editor',
   description: 'Turn your ideas into polished documents with an editor that the AI can operate directly.',
 }
 

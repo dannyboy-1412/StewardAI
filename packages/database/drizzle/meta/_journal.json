@@ -8,6 +8,27 @@
       "when": 1710000000000,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1720000000000,
+      "tag": "0001_page_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1730000000000,
+      "tag": "0002_enable_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1740000000000,
+      "tag": "0003_users_email_not_unique",
+      "breakpoints": true
     }
   ]
 }

@@ -20,6 +20,10 @@ body {
   color: var(--color-ink);
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   font-family: var(--font-sans);
 }
@@ -29,53 +33,137 @@ body {
   font-optical-sizing: auto;
 }
 
-.editor-surface .ProseMirror {
+.editor-surface {
   outline: none;
-  min-height: 70vh;
-  font-size: 17px;
-  line-height: 1.7;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11pt;
+  line-height: 1.15;
   color: #1b2b24;
 }
 
-.editor-surface .ProseMirror h1 {
-  font-family: var(--font-serif);
-  font-size: 2.1rem;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  margin: 0.4em 0 0.6em;
+.editor-page-canvas {
+  background: transparent;
 }
 
-.editor-surface .ProseMirror h2 {
-  font-family: var(--font-serif);
-  font-size: 1.45rem;
-  font-weight: 600;
-  margin: 1.4em 0 0.45em;
+.editor-surface.rm-with-pagination {
+  background: #fff;
+  box-sizing: border-box;
+  box-shadow:
+    0 1px 3px rgba(20, 40, 30, 0.12),
+    0 16px 50px rgba(20, 40, 30, 0.08);
 }
 
-.editor-surface .ProseMirror h3 {
-  font-size: 1.1rem;
-  font-weight: 650;
-  margin: 1.2em 0 0.35em;
+.editor-surface.rm-with-pagination .rm-pagination-gap {
+  background: #e8efe6;
 }
 
-.editor-surface .ProseMirror p {
+.editor-surface.rm-with-pagination .rm-page-footer,
+.editor-surface.rm-with-pagination .rm-page-header {
+  color: var(--color-muted);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.editor-surface.rm-with-pagination table {
+  display: table;
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.editor-surface.rm-with-pagination table tbody {
+  display: table-row-group;
+  max-height: none;
+  overflow: visible;
+}
+
+.editor-surface.rm-with-pagination table tr,
+.editor-surface.rm-with-pagination table > tr,
+.editor-surface.rm-with-pagination table tbody > tr {
+  display: table-row;
+}
+
+.editor-surface.rm-with-pagination table tr td,
+.editor-surface.rm-with-pagination table tr th {
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+.editor-surface:focus,
+.editor-surface:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.editor-surface h1,
+.editor-surface h2,
+.editor-surface h3,
+.editor-surface h4,
+.editor-surface h5,
+.editor-surface h6 {
+  font-family: inherit;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0.4em 0 0.35em;
+}
+
+.editor-surface h1 { font-size: 20pt; }
+.editor-surface h2 { font-size: 16pt; }
+.editor-surface h3 { font-size: 14pt; }
+.editor-surface h4 { font-size: 12pt; }
+.editor-surface h5 { font-size: 11pt; }
+.editor-surface h6 { font-size: 11pt; color: var(--color-muted); }
+
+.editor-surface .paragraph-style-title {
+  font-size: 26pt;
+  font-weight: 400;
+  margin: 0.2em 0 0.4em;
+}
+
+.editor-surface .paragraph-style-subtitle {
+  font-size: 15pt;
+  color: var(--color-muted);
+  margin: 0 0 0.8em;
+}
+
+.editor-surface p {
   margin: 0.55em 0;
 }
 
-.editor-surface .ProseMirror ul,
-.editor-surface .ProseMirror ol {
-  padding-left: 1.4em;
+.editor-surface ul,
+.editor-surface ol {
+  padding-left: 1.5em;
   margin: 0.5em 0;
+  list-style-position: outside;
 }
 
-.editor-surface .ProseMirror blockquote {
+.editor-surface ul {
+  list-style-type: disc;
+}
+
+.editor-surface ul ul {
+  list-style-type: circle;
+}
+
+.editor-surface ul ul ul {
+  list-style-type: square;
+}
+
+.editor-surface ol {
+  list-style-type: decimal;
+}
+
+.editor-surface li {
+  display: list-item;
+}
+
+.editor-surface blockquote {
   border-left: 3px solid var(--color-leaf);
   padding-left: 1rem;
   color: var(--color-muted);
   margin: 1em 0;
 }
 
-.editor-surface .ProseMirror pre {
+.editor-surface pre {
   background: #13261e;
   color: #e8efe6;
   padding: 1rem;
@@ -83,46 +171,58 @@ body {
   overflow-x: auto;
 }
 
-.editor-surface .ProseMirror table {
+.editor-surface table {
   border-collapse: collapse;
   width: 100%;
   margin: 1em 0;
   font-size: 0.95rem;
 }
 
-.editor-surface .ProseMirror th,
-.editor-surface .ProseMirror td {
+.editor-surface th,
+.editor-surface td {
   border: 1px solid #c9d7cb;
   padding: 0.55rem 0.7rem;
   min-width: 80px;
 }
 
-.editor-surface .ProseMirror th {
+.editor-surface th {
   background: #f3f7f2;
   font-weight: 650;
 }
 
-.editor-surface .ProseMirror img {
+.editor-surface img {
+  display: block;
   max-width: 100%;
+  max-height: min(720px, var(--rm-max-content-child-height, 720px));
+  height: auto;
+  object-fit: contain;
+  margin: 0.75em 0;
   border-radius: 12px;
 }
 
-.editor-surface .ProseMirror .equation-block {
+.editor-surface img.ProseMirror-selectednode {
+  outline: 2px solid var(--color-leaf);
+  outline-offset: 2px;
+}
+
+.editor-surface .equation-block {
   background: #f4f8f3;
   border: 1px dashed #b7cbb9;
   padding: 0.8rem;
   border-radius: 10px;
   text-align: center;
   font-family: ui-serif, Georgia, serif;
+  max-height: min(720px, var(--rm-max-content-child-height, 720px));
+  overflow: auto;
 }
 
-.editor-surface .ProseMirror span[data-citation] {
+.editor-surface span[data-citation] {
   color: var(--color-leaf);
   font-size: 0.85em;
   font-weight: 650;
 }
 
-.editor-surface .ProseMirror .is-ai-highlight {
+.editor-surface .is-ai-highlight {
   background: #cfe9c8;
   border-radius: 4px;
   animation: fadeHighlight 2.4s ease forwards;
@@ -133,10 +233,129 @@ body {
   100% { background: transparent; }
 }
 
-.ProseMirror p.is-editor-empty:first-child::before {
+.editor-surface p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   float: left;
   color: #8aa090;
   pointer-events: none;
   height: 0;
+}
+
+.editor-surface ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0.25em;
+}
+
+.editor-surface ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+}
+
+.editor-surface .page-break {
+  border: 0;
+  border-top: 1px dashed #b7cbb9;
+  height: 0;
+  margin: 1.5em 0;
+  page-break-after: always;
+  break-after: page;
+}
+
+.editor-surface .page-break::after {
+  content: "Page break";
+  display: block;
+  color: var(--color-muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+  transform: translateY(-0.7em);
+}
+
+.editor-surface .table-of-contents {
+  background: #f7faf6;
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  padding: 0.8rem 1rem;
+  margin: 1em 0;
+}
+
+.editor-surface .table-of-contents .toc-title {
+  font-weight: 650;
+  margin: 0 0 0.5em;
+}
+
+.editor-surface .table-of-contents ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.editor-surface .table-of-contents li[data-level="2"] { padding-left: 1rem; }
+.editor-surface .table-of-contents li[data-level="3"] { padding-left: 2rem; }
+.editor-surface .table-of-contents button {
+  color: var(--color-leaf);
+  text-decoration: underline;
+}
+
+.editor-surface .find-match {
+  background: #ffe566;
+}
+
+.editor-surface .find-match.is-active {
+  background: #ff9900;
+  color: #fff;
+}
+
+.editor-surface .image-block {
+  margin: 0.75em 0;
+}
+
+.editor-surface .image-block[data-align="center"] {
+  text-align: center;
+}
+
+.editor-surface .image-block[data-align="right"] {
+  text-align: right;
+}
+
+.editor-surface .image-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 12px;
+  height: 12px;
+  background: var(--color-leaf);
+  border-radius: 2px;
+  cursor: nwse-resize;
+}
+
+.editor-surface sub { font-size: 0.75em; }
+.editor-surface sup { font-size: 0.75em; }
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .editor-page-canvas {
+    zoom: 1 !important;
+    box-shadow: none;
+    width: auto !important;
+  }
+
+  .editor-surface.rm-with-pagination {
+    box-shadow: none;
+  }
+
+  .editor-surface.rm-with-pagination .rm-pagination-gap {
+    display: none;
+    height: 0;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  @page {
+    margin: 0;
+  }
 }

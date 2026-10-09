@@ -18,10 +18,13 @@ export type BlockType =
   | 'codeBlock'
   | 'bulletList'
   | 'orderedList'
+  | 'taskList'
   | 'table'
   | 'horizontalRule'
   | 'image'
   | 'equation'
+  | 'pageBreak'
+  | 'tableOfContents'
 
 export const BLOCK_TYPES_WITH_ID: readonly string[] = [
   'paragraph',
@@ -30,10 +33,13 @@ export const BLOCK_TYPES_WITH_ID: readonly string[] = [
   'codeBlock',
   'bulletList',
   'orderedList',
+  'taskList',
   'table',
   'horizontalRule',
   'image',
   'equation',
+  'pageBreak',
+  'tableOfContents',
 ]
 
 export type CitationSource = {

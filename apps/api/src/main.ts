@@ -20,7 +20,7 @@ async function bootstrap() {
   await app.listen(port)
   const httpServer = app.getHttpServer()
   app.get(CollabService).attach(httpServer)
-  console.log(`Writee API listening on ${port}`)
+  console.log(`PenPal AI API listening on ${port}`)
 }
 
 bootstrap()

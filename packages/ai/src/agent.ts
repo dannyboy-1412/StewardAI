@@ -1,15 +1,8 @@
 import { generateText, streamText, stepCountIs, tool, type LanguageModel } from 'ai'
 import { z } from 'zod'
-import {
-  applyOp,
-  parseDocumentOp,
-  toAgentView,
-  validateOp,
-  type DocumentOp,
-  type JSONContent,
-} from '@docai/document'
+import { toAgentView, type DocumentOp, type JSONContent } from '@docai/document'
 import { ASK_AGENT_SYSTEM, DOCUMENT_AGENT_SYSTEM, buildUserPrompt } from './prompts.js'
-import { createDocumentTools, type WorkingDocument } from './tools.js'
+import { applyValidated, createDocumentTools, type WorkingDocument } from './tools.js'
 
 export type AgentFile = { id: string; filename: string }
 
@@ -42,8 +35,8 @@ export function runDocumentAgent(input: RunDocumentAgentInput) {
     recordOp: (op) => {
       ops.push(op)
     },
-    emitOp: (op) => {
-      input.writer?.write({ type: 'data-op', data: op })
+    emitPatch: (payload) => {
+      input.writer?.write({ type: 'data-patch', data: payload })
     },
     readFile: input.readFile,
   }
@@ -57,7 +50,7 @@ export function runDocumentAgent(input: RunDocumentAgentInput) {
           inputSchema: z.object({
             afterBlockId: z.string().nullable().optional(),
             heading: z.string().min(1),
-            level: z.number().int().min(1).max(3).default(1),
+            level: z.number().int().min(1).max(6).default(1),
             brief: z.string().min(1),
             targetWords: z.number().int().min(80).max(1200).default(350),
           }),
@@ -70,24 +63,12 @@ Brief: ${brief}
 Target length: about ${targetWords} words.
 Return markdown only. Do not include the heading itself.`,
             })
-            const op = parseDocumentOp({
+            return applyValidated(working, {
               type: 'createSection',
               afterBlockId,
               heading,
               level,
               markdown: markdown.text,
-            })
-            const errors = validateOp(working.getDoc(), op)
-            if (errors.length > 0) {
-              throw new Error(errors.map((error) => error.message).join('; '))
-            }
-            const applied = applyOp(working.getDoc(), op)
-            working.setDoc(applied.doc)
-            working.recordOp(op)
-            working.emitOp(op)
-            return JSON.stringify({
-              ok: true,
-              affectedBlockIds: applied.affectedBlockIds,
             })
           },
   })

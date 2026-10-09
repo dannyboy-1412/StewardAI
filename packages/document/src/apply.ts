@@ -2,12 +2,22 @@ import { createBlockId } from './ids.js'
 import { markdownToNodes } from './markdown.js'
 import type { DocumentOp } from './ops.js'
 import {
+  affectedIdsFromPatches,
+  applyPatches,
+  type BlockPatch,
+} from './patches.js'
+import {
+  applyStyleText,
+  clearBlockFormatting,
+  copyBlockLayout,
+} from './style-text.js'
+import {
   assignMissingIds,
   blockId,
   cloneDoc,
+  findBlockById,
   findBlockIndex,
   paragraph,
-  setTopLevelBlocks,
   tableNode,
   textOf,
   topLevelBlocks,
@@ -18,103 +28,55 @@ import type { JSONContent } from './types.js'
 export type ApplyResult = {
   doc: JSONContent
   affectedBlockIds: string[]
+  patches: BlockPatch[]
 }
 
-function insertAt(
-  blocks: JSONContent[],
-  newBlocks: JSONContent[],
+function atomNode(type: 'pageBreak' | 'tableOfContents'): JSONContent {
+  return { type, attrs: { id: createBlockId() } }
+}
+
+function insertPatch(
+  nodes: JSONContent[],
   afterBlockId?: string | null,
   position?: 'start' | 'end',
-): JSONContent[] {
-  if (position === 'start') {
-    return [...newBlocks, ...blocks]
+): BlockPatch {
+  return {
+    type: 'insert',
+    afterBlockId: afterBlockId ?? null,
+    position,
+    nodes,
   }
-  if (!afterBlockId || position === 'end') {
-    return [...blocks, ...newBlocks]
-  }
-  const index = findBlockIndex(blocks, afterBlockId)
-  if (index === -1) {
-    throw new Error(`Block ${afterBlockId} was not found`)
-  }
-  return [...blocks.slice(0, index + 1), ...newBlocks, ...blocks.slice(index + 1)]
 }
 
-function idsOf(nodes: JSONContent[]): string[] {
-  return nodes.map((node) => blockId(node)).filter((id): id is string => Boolean(id))
-}
-
-function applyOne(doc: JSONContent, op: DocumentOp): ApplyResult {
+export function resolveOp(doc: JSONContent, op: DocumentOp): BlockPatch[] {
   const blocks = topLevelBlocks(doc)
 
   switch (op.type) {
-    case 'insertBlocks': {
-      const nodes = markdownToNodes(op.markdown).map(assignMissingIds)
-      return {
-        doc: setTopLevelBlocks(doc, insertAt(blocks, nodes, op.afterBlockId, op.position)),
-        affectedBlockIds: idsOf(nodes),
-      }
-    }
+    case 'insertBlocks':
+      return [
+        insertPatch(
+          markdownToNodes(op.markdown).map(assignMissingIds),
+          op.afterBlockId,
+          op.position,
+        ),
+      ]
     case 'replaceBlocks': {
       const firstIndex = findBlockIndex(blocks, op.blockIds[0] ?? '')
-      if (firstIndex === -1) {
-        throw new Error(`Block ${op.blockIds[0]} was not found`)
+      const original = firstIndex === -1 ? undefined : blocks[firstIndex]
+      let nodes = markdownToNodes(op.markdown).map(assignMissingIds)
+      if (original && op.blockIds.length === 1 && nodes.length === 1 && nodes[0]?.type === original.type) {
+        nodes = [copyBlockLayout(original, nodes[0])]
       }
-      const nodes = markdownToNodes(op.markdown).map(assignMissingIds)
-      const remaining = blocks.filter((block) => {
-        const id = blockId(block)
-        return !id || !op.blockIds.includes(id)
-      })
-      const insertIndex = Math.min(
-        firstIndex,
-        remaining.length === 0 ? 0 : remaining.length,
-      )
-      const next = [...remaining]
-      const originalRemainingBefore = blocks
-        .slice(0, firstIndex)
-        .filter((block) => {
-          const id = blockId(block)
-          return !id || !op.blockIds.includes(id)
-        }).length
-      next.splice(originalRemainingBefore, 0, ...nodes)
-      void insertIndex
-      return {
-        doc: setTopLevelBlocks(doc, next),
-        affectedBlockIds: idsOf(nodes),
-      }
+      return [{ type: 'replace', blockIds: op.blockIds, nodes }]
     }
-    case 'deleteBlocks': {
-      return {
-        doc: setTopLevelBlocks(
-          doc,
-          blocks.filter((block) => {
-            const id = blockId(block)
-            return !id || !op.blockIds.includes(id)
-          }),
-        ),
-        affectedBlockIds: op.blockIds,
-      }
-    }
-    case 'moveBlocks': {
-      const moving = blocks.filter((block) => {
-        const id = blockId(block)
-        return id && op.blockIds.includes(id)
-      })
-      const remaining = blocks.filter((block) => {
-        const id = blockId(block)
-        return !id || !op.blockIds.includes(id)
-      })
-      return {
-        doc: setTopLevelBlocks(
-          doc,
-          insertAt(remaining, moving, op.afterBlockId),
-        ),
-        affectedBlockIds: op.blockIds,
-      }
-    }
+    case 'deleteBlocks':
+      return [{ type: 'delete', blockIds: op.blockIds }]
+    case 'moveBlocks':
+      return [{ type: 'move', blockIds: op.blockIds, afterBlockId: op.afterBlockId }]
     case 'formatBlocks': {
-      const next = blocks.map((block) => {
+      const updated = blocks.flatMap((block) => {
         const id = blockId(block)
-        if (!id || !op.blockIds.includes(id)) return block
+        if (!id || !op.blockIds.includes(id)) return []
         const formatted: JSONContent = { ...block }
         if (op.blockType) {
           formatted.type = op.blockType
@@ -127,56 +89,72 @@ function applyOne(doc: JSONContent, op: DocumentOp): ApplyResult {
         if (op.alignment) {
           formatted.attrs.textAlign = op.alignment
         }
-        return formatted
-      })
-      return { doc: setTopLevelBlocks(doc, next), affectedBlockIds: op.blockIds }
-    }
-    case 'createTable': {
-      const table = tableNode(op.headers, op.rows)
-      return {
-        doc: setTopLevelBlocks(
-          doc,
-          insertAt(blocks, [table], op.afterBlockId),
-        ),
-        affectedBlockIds: idsOf([table]),
-      }
-    }
-    case 'updateTableCells': {
-      const next = blocks.map((block) => {
-        if (blockId(block) !== op.tableId) return block
-        const rows = [...(block.content ?? [])]
-        for (const update of op.cells) {
-          const row = rows[update.row]
-          if (!row?.content) continue
-          const cells = [...row.content]
-          const existing = cells[update.col]
-          if (!existing) continue
-          cells[update.col] = {
-            ...existing,
-            content: [paragraph(update.text)],
-          }
-          rows[update.row] = { ...row, content: cells }
+        if (op.styleName !== undefined) {
+          formatted.attrs.styleName = op.styleName
+          if (op.styleName && !op.blockType) formatted.type = 'paragraph'
         }
-        return { ...block, content: rows }
+        if (op.lineHeight !== undefined) {
+          formatted.attrs.lineHeight = op.lineHeight
+        }
+        if (op.spaceBefore !== undefined) {
+          formatted.attrs.spaceBefore = op.spaceBefore
+        }
+        if (op.spaceAfter !== undefined) {
+          formatted.attrs.spaceAfter = op.spaceAfter
+        }
+        if (op.indent !== undefined) {
+          formatted.attrs.indent = op.indent
+        }
+        return [formatted]
       })
-      return {
-        doc: setTopLevelBlocks(doc, next),
-        affectedBlockIds: [op.tableId],
+      return updated.length > 0 ? [{ type: 'update', blocks: updated }] : []
+    }
+    case 'styleText': {
+      const updated = blocks.flatMap((block) => {
+        const id = blockId(block)
+        if (!id || !op.blockIds.includes(id)) return []
+        return [applyStyleText(block, op)]
+      })
+      return updated.length > 0 ? [{ type: 'update', blocks: updated }] : []
+    }
+    case 'clearFormatting': {
+      const updated = blocks.flatMap((block) => {
+        const id = blockId(block)
+        if (!id || !op.blockIds.includes(id)) return []
+        return [clearBlockFormatting(block)]
+      })
+      return updated.length > 0 ? [{ type: 'update', blocks: updated }] : []
+    }
+    case 'insertPageBreak':
+      return [insertPatch([atomNode('pageBreak')], op.afterBlockId)]
+    case 'insertTableOfContents':
+      return [insertPatch([atomNode('tableOfContents')], op.afterBlockId)]
+    case 'createTable':
+      return [insertPatch([tableNode(op.headers, op.rows)], op.afterBlockId)]
+    case 'updateTableCells': {
+      const table = findBlockById(doc, op.tableId)
+      if (!table) return []
+      const rows = [...(table.content ?? [])]
+      for (const update of op.cells) {
+        const row = rows[update.row]
+        if (!row?.content) continue
+        const cells = [...row.content]
+        const existing = cells[update.col]
+        if (!existing) continue
+        cells[update.col] = {
+          ...existing,
+          content: [paragraph(update.text)],
+        }
+        rows[update.row] = { ...row, content: cells }
       }
+      return [{ type: 'update', blocks: [{ ...table, content: rows }] }]
     }
     case 'createSection': {
       const headingNode = heading(op.heading, op.level)
       const body = op.markdown.trim()
         ? markdownToNodes(op.markdown).map(assignMissingIds)
         : [paragraph('')]
-      const nodes = [headingNode, ...body]
-      return {
-        doc: setTopLevelBlocks(
-          doc,
-          insertAt(blocks, nodes, op.afterBlockId),
-        ),
-        affectedBlockIds: idsOf(nodes),
-      }
+      return [insertPatch([headingNode, ...body], op.afterBlockId)]
     }
     case 'addCitation': {
       const citationId = createBlockId()
@@ -187,45 +165,60 @@ function applyOne(doc: JSONContent, op: DocumentOp): ApplyResult {
       ]
         .filter(Boolean)
         .join(' ')
-      const next = blocks.map((block) => {
-        if (blockId(block) !== op.blockId) return block
-        const content = [...(block.content ?? [])]
-        content.push({
-          type: 'text',
-          text: ` [${citationId}]`,
-          marks: [
+      const patches: BlockPatch[] = []
+      const target = findBlockById(doc, op.blockId)
+      if (target) {
+        patches.push({
+          type: 'update',
+          blocks: [
             {
-              type: 'citation',
-              attrs: { citationId, title: op.source.title },
+              ...target,
+              content: [
+                ...(target.content ?? []),
+                {
+                  type: 'text',
+                  text: ` [${citationId}]`,
+                  marks: [
+                    {
+                      type: 'citation',
+                      attrs: { citationId, title: op.source.title },
+                    },
+                  ],
+                },
+              ],
             },
           ],
         })
-        return { ...block, content }
-      })
-      const referencesHeading = next.find(
+      }
+      const referenceLine = paragraph(
+        `[${citationId}] ${sourceLabel}${op.source.url ? `. ${op.source.url}` : ''}`,
+      )
+      const referencesHeading = blocks.find(
         (block) =>
           block.type === 'heading' &&
           textOf(block).toLowerCase() === 'references',
       )
-      const referenceLine = paragraph(
-        `[${citationId}] ${sourceLabel}${op.source.url ? `. ${op.source.url}` : ''}`,
-      )
       if (referencesHeading) {
-        const headingIndex = next.indexOf(referencesHeading)
-        next.splice(headingIndex + 1, 0, referenceLine)
+        patches.push(insertPatch([referenceLine], blockId(referencesHeading) ?? null))
       } else {
-        next.push(heading('References', 1), referenceLine)
+        patches.push(insertPatch([heading('References', 1), referenceLine], null, 'end'))
       }
-      return {
-        doc: setTopLevelBlocks(doc, next),
-        affectedBlockIds: [op.blockId, ...(blockId(referenceLine) ? [blockId(referenceLine)!] : [])],
-      }
+      return patches
+    }
+    default: {
+      const _exhaustive: never = op
+      return _exhaustive
     }
   }
 }
 
 export function applyOp(doc: JSONContent, op: DocumentOp): ApplyResult {
-  return applyOne(cloneDoc(doc), op)
+  const patches = resolveOp(doc, op)
+  return {
+    doc: applyPatches(doc, patches),
+    affectedBlockIds: affectedIdsFromPatches(patches),
+    patches,
+  }
 }
 
 export function applyOps(
@@ -235,7 +228,7 @@ export function applyOps(
   let current = cloneDoc(doc)
   const affected = new Set<string>()
   for (const op of ops) {
-    const result = applyOne(current, op)
+    const result = applyOp(current, op)
     current = result.doc
     for (const id of result.affectedBlockIds) affected.add(id)
   }

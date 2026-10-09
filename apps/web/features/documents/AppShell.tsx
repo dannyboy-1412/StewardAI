@@ -8,12 +8,14 @@ import {
   FolderOpen,
   Home,
   LayoutTemplate,
+  LogOut,
   Plus,
   Clock,
   Users,
 } from 'lucide-react'
 import { Logo } from '@/components/Logo'
-import { api, type DocumentRecord } from '@/lib/api'
+import { api, type DocumentRecord, type UserRecord } from '@/lib/api'
+import { createClient } from '@/lib/supabase/client'
 
 const nav = [
   { href: '/app', label: 'Home', icon: Home },
@@ -26,10 +28,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const [docs, setDocs] = useState<DocumentRecord[]>([])
+  const [user, setUser] = useState<UserRecord | null>(null)
 
   useEffect(() => {
     api.listDocuments().then(setDocs).catch(() => setDocs([]))
+    api.me().then(setUser).catch(() => setUser(null))
   }, [pathname])
+
+  async function signOut() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/')
+    router.refresh()
+  }
 
   async function createBlank() {
     try {
@@ -48,8 +59,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <div className="px-3">
           <button
+            type="button"
             onClick={createBlank}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-forest px-4 py-2.5 text-sm font-medium text-white"
+            className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-forest px-4 py-2.5 text-sm font-medium text-white transition hover:bg-forest-2"
           >
             <Plus className="h-4 w-4" /> New document
           </button>
@@ -85,6 +97,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span className="truncate">{doc.title}</span>
             </Link>
           ))}
+        </div>
+        <div className="mx-3 mt-auto mb-2 rounded-2xl border border-line px-3 py-3">
+          <div className="truncate text-sm font-medium text-forest">{user?.name ?? 'Signed in'}</div>
+          <div className="truncate text-xs text-muted">{user?.email ?? ''}</div>
+          <button
+            type="button"
+            onClick={signOut}
+            className="mt-2 inline-flex items-center gap-1.5 text-xs text-forest-2 hover:text-forest"
+          >
+            <LogOut className="h-3.5 w-3.5" /> Sign out
+          </button>
         </div>
         <div className="m-3 rounded-2xl bg-mist p-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-forest">

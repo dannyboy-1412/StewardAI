@@ -1,4 +1,5 @@
 import { nodesToMarkdown } from './markdown.js'
+import { blockStyleSummary } from './style-text.js'
 import { blockId, textOf, topLevelBlocks } from './tree.js'
 import type { JSONContent } from './types.js'
 
@@ -23,7 +24,7 @@ export function toAgentView(doc: JSONContent): string {
     .map((block) => {
       const id = blockId(block) ?? 'unknown'
       const markdown = nodesToMarkdown([block])
-      return `[${id}] ${block.type}\n${markdown}`
+      return `[${id}] ${block.type}${blockStyleSummary(block)}\n${markdown}`
     })
     .join('\n\n')
 

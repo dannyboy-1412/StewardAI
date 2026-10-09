@@ -1,4 +1,11 @@
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { defineConfig, devices } from '@playwright/test'
+
+for (const file of ['.env.local', '.env']) {
+  const path = resolve(__dirname, file)
+  if (existsSync(path)) process.loadEnvFile(path)
+}
 
 export default defineConfig({
   testDir: './e2e',

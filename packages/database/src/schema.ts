@@ -9,7 +9,7 @@ import {
   pgEnum,
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
-import type { JSONContent } from '@docai/document'
+import type { JSONContent, PageSettings } from '@docai/document'
 
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   dataType: () => 'bytea',
@@ -36,7 +36,7 @@ export const aiRunStatusEnum = pgEnum('ai_run_status', [
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey(),
-  email: text('email').notNull().unique(),
+  email: text('email').notNull(),
   name: text('name').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
@@ -62,6 +62,18 @@ export const documents = pgTable('documents', {
   title: text('title').notNull(),
   ydocState: bytea('ydoc_state'),
   contentJson: jsonb('content_json').$type<JSONContent>().notNull(),
+  pageSettings: jsonb('page_settings').$type<PageSettings>().notNull().default({
+    paperSize: 'A4',
+    orientation: 'portrait',
+    marginTop: 1,
+    marginBottom: 1,
+    marginLeft: 1,
+    marginRight: 1,
+    pageColor: '#ffffff',
+    headerText: '',
+    footerText: '',
+    showPageNumbers: true,
+  }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
