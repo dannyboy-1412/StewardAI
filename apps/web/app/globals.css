@@ -228,6 +228,26 @@ body {
   animation: fadeHighlight 2.4s ease forwards;
 }
 
+.editor-surface .is-review-added,
+.editor-surface [data-review-kind="added"] {
+  background: #d9f0d4;
+  box-shadow: inset 3px 0 0 #2f6a55;
+}
+
+.editor-surface .is-review-modified,
+.editor-surface [data-review-kind="modified"] {
+  background: #eef4c8;
+  box-shadow: inset 3px 0 0 #8a7a1d;
+}
+
+.editor-surface .is-review-removed,
+.editor-surface [data-review-kind="removed"] {
+  background: #f3e2e0;
+  text-decoration: line-through;
+  opacity: 0.7;
+  box-shadow: inset 3px 0 0 #a33b32;
+}
+
 @keyframes fadeHighlight {
   0% { background: #cfe9c8; }
   100% { background: transparent; }

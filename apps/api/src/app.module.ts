@@ -9,6 +9,7 @@ import { UsersModule } from './modules/users/users.module.js'
 import { DocumentsModule } from './modules/documents/documents.module.js'
 import { FilesModule } from './modules/files/files.module.js'
 import { AiModule } from './modules/ai/ai.module.js'
+import { CitationsModule } from './modules/citations/citations.module.js'
 import { CollabModule } from './modules/collab/collab.module.js'
 import { HealthController } from './modules/health/health.controller.js'
 import { AuthGuard } from './auth/auth.guard.js'
@@ -24,6 +25,7 @@ import { AuthGuard } from './auth/auth.guard.js'
     DocumentsModule,
     FilesModule,
     AiModule,
+    CitationsModule,
     CollabModule,
   ],
   controllers: [HealthController],

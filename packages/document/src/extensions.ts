@@ -28,6 +28,7 @@ import { ParagraphStyle } from './extensions/paragraphStyle.js'
 import { PageBreak } from './extensions/pageBreak.js'
 import { TableOfContents } from './extensions/tableOfContents.js'
 import { ResizableImage } from './extensions/resizableImage.js'
+import { ReferenceAttrs } from './extensions/referenceAttrs.js'
 
 export { FontSize } from './extensions/fontSize.js'
 export { LineHeight } from './extensions/lineHeight.js'
@@ -37,6 +38,7 @@ export { ParagraphStyle } from './extensions/paragraphStyle.js'
 export { PageBreak } from './extensions/pageBreak.js'
 export { TableOfContents } from './extensions/tableOfContents.js'
 export { ResizableImage } from './extensions/resizableImage.js'
+export { ReferenceAttrs } from './extensions/referenceAttrs.js'
 
 export const Equation = Node.create({
   name: 'equation',
@@ -126,6 +128,7 @@ export function createEditorExtensions(options?: {
     }),
     Equation,
     Citation,
+    ReferenceAttrs,
     ...(options?.uniqueId === false
       ? []
       : [

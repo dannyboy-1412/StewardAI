@@ -9,14 +9,13 @@ import {
 import {
   applyStyleText,
   clearBlockFormatting,
-  copyBlockLayout,
+  copyLayoutAcrossBlocks,
 } from './style-text.js'
 import {
   assignMissingIds,
   blockId,
   cloneDoc,
   findBlockById,
-  findBlockIndex,
   paragraph,
   tableNode,
   textOf,
@@ -61,12 +60,14 @@ export function resolveOp(doc: JSONContent, op: DocumentOp): BlockPatch[] {
         ),
       ]
     case 'replaceBlocks': {
-      const firstIndex = findBlockIndex(blocks, op.blockIds[0] ?? '')
-      const original = firstIndex === -1 ? undefined : blocks[firstIndex]
-      let nodes = markdownToNodes(op.markdown).map(assignMissingIds)
-      if (original && op.blockIds.length === 1 && nodes.length === 1 && nodes[0]?.type === original.type) {
-        nodes = [copyBlockLayout(original, nodes[0])]
-      }
+      const originals = op.blockIds.flatMap((id) => {
+        const block = findBlockById(doc, id)
+        return block ? [block] : []
+      })
+      const nodes = copyLayoutAcrossBlocks(
+        originals,
+        markdownToNodes(op.markdown).map(assignMissingIds),
+      )
       return [{ type: 'replace', blockIds: op.blockIds, nodes }]
     }
     case 'deleteBlocks':

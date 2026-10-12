@@ -21,10 +21,13 @@ export const pageSettingsSchema = z.object({
 
 export type PageSettingsInput = z.infer<typeof pageSettingsSchema>
 
+export const citationStyleSchema = z.enum(['apa7', 'harvard', 'aglc4', 'ieee', 'vancouver'])
+
 export const updateDocumentBodySchema = z.object({
   title: z.string().min(1).max(200).optional(),
   projectId: z.string().uuid().nullable().optional(),
   pageSettings: pageSettingsSchema.optional(),
+  citationStyle: citationStyleSchema.optional(),
 })
 
 export const createProjectBodySchema = z.object({
@@ -37,6 +40,17 @@ export const aiRunBodySchema = z.object({
   fileIds: z.array(z.string().uuid()).default([]),
   snapshot: z.unknown().optional(),
   mode: z.enum(['edit', 'ask']).default('edit'),
+})
+
+export const aiRunReviewBodySchema = z.object({
+  outcome: z.enum(['accepted', 'partial', 'rejected']),
+  acceptedChangeIds: z.array(z.string()).default([]),
+  changes: z.array(z.unknown()).default([]),
+})
+
+export const acknowledgementBodySchema = z.object({
+  format: z.enum(['deakin', 'usyd']),
+  usageSummary: z.string().max(4_000).optional(),
 })
 
 export type CreateDocumentBody = z.infer<typeof createDocumentBodySchema>

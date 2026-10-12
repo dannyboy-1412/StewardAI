@@ -2,7 +2,12 @@ import { generateText, streamText, stepCountIs, tool, type LanguageModel } from 
 import { z } from 'zod'
 import { toAgentView, type DocumentOp, type JSONContent } from '@docai/document'
 import { ASK_AGENT_SYSTEM, DOCUMENT_AGENT_SYSTEM, buildUserPrompt } from './prompts.js'
-import { applyValidated, createDocumentTools, type WorkingDocument } from './tools.js'
+import {
+  applyValidated,
+  createDocumentTools,
+  type CitationHooks,
+  type WorkingDocument,
+} from './tools.js'
 
 export type AgentFile = { id: string; filename: string }
 
@@ -21,11 +26,13 @@ export type RunDocumentAgentInput = {
   readFile: (fileId: string) => Promise<string>
   abortSignal?: AbortSignal
   writer?: AgentWriter
+  citations?: CitationHooks
 }
 
 export function runDocumentAgent(input: RunDocumentAgentInput) {
   let doc: JSONContent = input.document
   const ops: DocumentOp[] = []
+  const verifyFailures: string[] = []
 
   const working: WorkingDocument = {
     getDoc: () => doc,
@@ -39,10 +46,13 @@ export function runDocumentAgent(input: RunDocumentAgentInput) {
       input.writer?.write({ type: 'data-patch', data: payload })
     },
     readFile: input.readFile,
+    recordVerifyFailure: (message) => {
+      verifyFailures.push(message)
+    },
   }
 
   const writable = input.mode === 'edit'
-  const documentTools = createDocumentTools(working, writable)
+  const documentTools = createDocumentTools(working, writable, input.citations)
 
   const writeSectionTool = tool({
           description:
@@ -53,8 +63,9 @@ export function runDocumentAgent(input: RunDocumentAgentInput) {
             level: z.number().int().min(1).max(6).default(1),
             brief: z.string().min(1),
             targetWords: z.number().int().min(80).max(1200).default(350),
+            reason: z.string().min(1).max(140),
           }),
-          execute: async ({ afterBlockId, heading, level, brief, targetWords }) => {
+          execute: async ({ afterBlockId, heading, level, brief, targetWords, reason }) => {
             const markdown = await generateText({
               model: input.fastModel ?? input.model,
               abortSignal: input.abortSignal,
@@ -63,13 +74,17 @@ Brief: ${brief}
 Target length: about ${targetWords} words.
 Return markdown only. Do not include the heading itself.`,
             })
-            return applyValidated(working, {
-              type: 'createSection',
-              afterBlockId,
-              heading,
-              level,
-              markdown: markdown.text,
-            })
+            return applyValidated(
+              working,
+              {
+                type: 'createSection',
+                afterBlockId,
+                heading,
+                level,
+                markdown: markdown.text,
+              },
+              reason,
+            )
           },
   })
 
@@ -93,5 +108,6 @@ Return markdown only. Do not include the heading itself.`,
     result,
     getDoc: () => doc,
     getOps: () => ops,
+    getVerifyFailures: () => verifyFailures,
   }
 }

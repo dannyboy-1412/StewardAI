@@ -34,6 +34,21 @@ export const aiRunStatusEnum = pgEnum('ai_run_status', [
   'cancelled',
 ])
 
+export const aiRunReviewStatusEnum = pgEnum('ai_run_review_status', [
+  'pending',
+  'accepted',
+  'partial',
+  'rejected',
+])
+
+export const citationStyleEnum = pgEnum('citation_style', [
+  'apa7',
+  'harvard',
+  'aglc4',
+  'ieee',
+  'vancouver',
+])
+
 export const users = pgTable('users', {
   id: uuid('id').primaryKey(),
   email: text('email').notNull(),
@@ -74,6 +89,7 @@ export const documents = pgTable('documents', {
     footerText: '',
     showPageNumbers: true,
   }),
+  citationStyle: citationStyleEnum('citation_style').notNull().default('apa7'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
@@ -123,6 +139,9 @@ export const aiRuns = pgTable('ai_runs', {
   error: text('error'),
   inputTokens: integer('input_tokens'),
   outputTokens: integer('output_tokens'),
+  responseText: text('response_text'),
+  changes: jsonb('changes').$type<unknown[]>().notNull().default([]),
+  reviewStatus: aiRunReviewStatusEnum('review_status'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   completedAt: timestamp('completed_at', { withTimezone: true }),
 })

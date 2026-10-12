@@ -127,12 +127,49 @@ export function clearBlockFormatting(block: JSONContent): JSONContent {
   return stripMarks({ ...block, attrs })
 }
 
+function firstTextStyleAttrs(node: JSONContent): Record<string, unknown> | undefined {
+  const marks = firstTextMarks(node)
+  const textStyle = marks?.find((mark) => mark.type === 'textStyle')
+  return textStyle?.attrs
+}
+
+function applyDefaultTextStyle(node: JSONContent, attrs: Record<string, unknown>): JSONContent {
+  if (node.text !== undefined) {
+    const hasTextStyle = node.marks?.some((mark) => mark.type === 'textStyle')
+    if (hasTextStyle) return node
+    return {
+      ...node,
+      marks: [...(node.marks ?? []), { type: 'textStyle', attrs: { ...attrs } }],
+    }
+  }
+  if (!node.content) return node
+  return {
+    ...node,
+    content: node.content.map((child) => applyDefaultTextStyle(child, attrs)),
+  }
+}
+
 export function copyBlockLayout(from: JSONContent, to: JSONContent): JSONContent {
   const attrs = { ...to.attrs }
   for (const key of BLOCK_ATTR_KEYS) {
     if (from.attrs?.[key] !== undefined) attrs[key] = from.attrs[key]
   }
-  return { ...to, attrs }
+  let next: JSONContent = { ...to, attrs }
+  const textStyle = firstTextStyleAttrs(from)
+  if (textStyle && Object.keys(textStyle).length > 0) {
+    next = applyDefaultTextStyle(next, textStyle)
+  }
+  return next
+}
+
+export function copyLayoutAcrossBlocks(
+  originals: JSONContent[],
+  nodes: JSONContent[],
+): JSONContent[] {
+  return nodes.map((node, index) => {
+    const original = originals[index]
+    return original ? copyBlockLayout(original, node) : node
+  })
 }
 
 function firstTextMarks(node: JSONContent): JSONMark[] | undefined {

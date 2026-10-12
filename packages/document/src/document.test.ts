@@ -3,10 +3,14 @@ import { TiptapTransformer } from '@hocuspocus/transformer'
 import { applyOp, applyOps } from './apply.js'
 import { markdownToNodes, nodesToMarkdown } from './markdown.js'
 import { toAgentView, searchDocument } from './agent-view.js'
+import { detectCitations } from './citations/detect.js'
+import { formatCsl, sourceToCsl } from './citations/format.js'
 import { documentOpSchema } from './ops.js'
 import { applyPatches, BlockNotFoundError } from './patches.js'
+import { composeAcceptedPatches, diffTopLevelBlocks } from './review.js'
 import { emptyDoc, heading, paragraph, blockId, cloneDoc, topLevelBlocks } from './tree.js'
 import { validateOp } from './validate.js'
+import { verifyOpApplied } from './verify.js'
 import { templateContent } from './templates.js'
 import { createEditorExtensions } from './extensions.js'
 import * as ids from './ids.js'
@@ -210,6 +214,154 @@ describe('task lists and formatting ops', () => {
     expect(next?.attrs?.textAlign).toBe('right')
     expect(next?.attrs?.indent).toBe(1)
     expect(nodesToMarkdown([next!])).toContain('new wording')
+  })
+
+  it('preserves fonts when replacing several blocks by index', () => {
+    const first = paragraph('one')
+    first.content = [
+      {
+        type: 'text',
+        text: 'one',
+        marks: [{ type: 'textStyle', attrs: { fontFamily: 'Georgia', fontSize: '14pt' } }],
+      },
+    ]
+    const second = paragraph('two')
+    second.content = [
+      {
+        type: 'text',
+        text: 'two',
+        marks: [{ type: 'textStyle', attrs: { fontFamily: 'Arial', fontSize: '11pt' } }],
+      },
+    ]
+    const result = applyOp(
+      { type: 'doc', content: [first, second] },
+      {
+        type: 'replaceBlocks',
+        blockIds: [blockId(first)!, blockId(second)!],
+        markdown: 'alpha\n\nbeta',
+      },
+    )
+    const [alpha, beta] = topLevelBlocks(result.doc)
+    expect(JSON.stringify(alpha)).toContain('Georgia')
+    expect(JSON.stringify(alpha)).toContain('14pt')
+    expect(JSON.stringify(beta)).toContain('Arial')
+    expect(JSON.stringify(beta)).toContain('11pt')
+    expect(nodesToMarkdown(topLevelBlocks(result.doc))).toContain('alpha')
+  })
+
+  it('verifies formatting, tables, page breaks, and tables of contents', () => {
+    const para = paragraph('Title line')
+    const start = { type: 'doc', content: [para] }
+    const formatted = applyOp(start, {
+      type: 'formatBlocks',
+      blockIds: [blockId(para)!],
+      headingLevel: 2,
+      alignment: 'center',
+    })
+    expect(verifyOpApplied(formatted.doc, {
+      type: 'formatBlocks',
+      blockIds: [blockId(para)!],
+      headingLevel: 2,
+      alignment: 'center',
+    }, formatted.affectedBlockIds)).toEqual([])
+
+    const table = applyOp(formatted.doc, {
+      type: 'createTable',
+      headers: ['A'],
+      rows: [['1']],
+    })
+    expect(verifyOpApplied(table.doc, {
+      type: 'createTable',
+      headers: ['A'],
+      rows: [['1']],
+    }, table.affectedBlockIds)).toEqual([])
+
+    const withBreak = applyOp(table.doc, { type: 'insertPageBreak' })
+    expect(verifyOpApplied(withBreak.doc, { type: 'insertPageBreak' }, withBreak.affectedBlockIds)).toEqual([])
+
+    const withToc = applyOp(withBreak.doc, { type: 'insertTableOfContents' })
+    expect(
+      verifyOpApplied(withToc.doc, { type: 'insertTableOfContents' }, withToc.affectedBlockIds),
+    ).toEqual([])
+  })
+})
+
+describe('review diffs', () => {
+  it('accepts a subset of added and modified blocks', () => {
+    const intro = paragraph('Keep me')
+    const extra = paragraph('Old extra')
+    const base = { type: 'doc', content: [intro, extra] }
+    const added = paragraph('New section')
+    const rewritten = paragraph('Changed extra')
+    rewritten.attrs = { ...extra.attrs }
+    const proposed = { type: 'doc', content: [intro, rewritten, added] }
+    const changes = diffTopLevelBlocks(base, proposed)
+    expect(changes.map((change) => change.kind).sort()).toEqual(['added', 'modified'])
+    const addedChange = changes.find((change) => change.kind === 'added')!
+    const composed = composeAcceptedPatches(base, changes, [addedChange.id])
+    const markdown = nodesToMarkdown(topLevelBlocks(composed.doc))
+    expect(markdown).toContain('New section')
+    expect(markdown).toContain('Old extra')
+    expect(markdown).not.toContain('Changed extra')
+  })
+
+  it('falls back when an insert anchor was rejected', () => {
+    const first = paragraph('First')
+    const base = { type: 'doc', content: [first] }
+    const middle = paragraph('Middle')
+    const last = paragraph('Last')
+    const proposed = { type: 'doc', content: [first, middle, last] }
+    const changes = diffTopLevelBlocks(base, proposed)
+    const lastChange = changes.find((change) => change.afterMarkdown === 'Last')!
+    const composed = composeAcceptedPatches(base, changes, [lastChange.id])
+    expect(nodesToMarkdown(topLevelBlocks(composed.doc))).toContain('Last')
+    expect(nodesToMarkdown(topLevelBlocks(composed.doc))).not.toContain('Middle')
+  })
+
+  it('accepts a move', () => {
+    const a = heading('A', 1)
+    const b = heading('B', 1)
+    const c = heading('C', 1)
+    const base = { type: 'doc', content: [a, b, c] }
+    const proposed = { type: 'doc', content: [a, c, b] }
+    const changes = diffTopLevelBlocks(base, proposed)
+    expect(changes.some((change) => change.kind === 'moved')).toBe(true)
+    const composed = composeAcceptedPatches(
+      base,
+      changes,
+      changes.filter((change) => change.kind === 'moved').map((change) => change.id),
+    )
+    const titles = topLevelBlocks(composed.doc).map((node) => node.content?.[0]?.text)
+    expect(titles).toEqual(['A', 'C', 'B'])
+  })
+})
+
+describe('citation detection and formatting', () => {
+  it('matches in-text citations to reference entries and reports orphans', () => {
+    const body = paragraph('Recent work (Smith, 2020) and later claims (Jones, 2021) disagree.')
+    const headingNode = heading('References', 1)
+    const smith = paragraph('Smith, J. (2020). Solar farms. Energy Press.')
+    const orphan = paragraph('Lee, A. (2018). Unused. Other Press.')
+    const doc = { type: 'doc', content: [body, headingNode, smith, orphan] }
+    const report = detectCitations(doc)
+    expect(report.entries).toHaveLength(2)
+    expect(report.inText.some((item) => item.surname === 'Smith' && item.year === '2020')).toBe(true)
+    expect(report.orphanCitations.some((item) => item.surname === 'Jones')).toBe(true)
+    expect(report.orphanReferences.some((item) => item.surname === 'Lee')).toBe(true)
+  })
+
+  it('formats APA 7, Harvard, and AGLC4 from CSL JSON', () => {
+    const csl = sourceToCsl({
+      title: 'Solar farms',
+      authors: 'Smith, Jane',
+      year: '2020',
+      publisher: 'Energy Press',
+      doi: '10.1234/solar',
+    })
+    expect(formatCsl(csl, 'apa7')).toContain('Smith, J. (2020).')
+    expect(formatCsl(csl, 'harvard')).toContain('Smith, J. (2020)')
+    expect(formatCsl(csl, 'aglc4')).toContain('Smith, Jane')
+    expect(formatCsl(csl, 'aglc4')).toContain('2020')
   })
 })
 

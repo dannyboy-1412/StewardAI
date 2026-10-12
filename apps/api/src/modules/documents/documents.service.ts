@@ -12,6 +12,7 @@ import {
   DEFAULT_PAGE_SETTINGS,
   mergePageSettings,
   templateContent,
+  type CitationStyle,
   type JSONContent,
   type PageSettings,
 } from '@docai/document'
@@ -27,8 +28,27 @@ export type DocumentRecord = {
   contentJson: JSONContent
   ydocState: Buffer | null
   pageSettings: PageSettings
+  citationStyle: CitationStyle
   createdAt: Date
   updatedAt: Date
+}
+
+export type AiRunReviewStatus = 'pending' | 'accepted' | 'partial' | 'rejected'
+
+export type AiRunRecord = {
+  id: string
+  documentId: string
+  userId: string
+  prompt: string
+  model: string
+  status: 'running' | 'completed' | 'failed' | 'cancelled'
+  ops: unknown[]
+  error: string | null
+  responseText: string | null
+  changes: unknown[]
+  reviewStatus: AiRunReviewStatus | null
+  createdAt: Date
+  completedAt: Date | null
 }
 
 export type VersionRecord = {
@@ -61,21 +81,7 @@ type MemoryStore = {
     }
   >
   projects: Map<string, { id: string; userId: string; name: string; createdAt: Date; updatedAt: Date }>
-  aiRuns: Map<
-    string,
-    {
-      id: string
-      documentId: string
-      userId: string
-      prompt: string
-      model: string
-      status: 'running' | 'completed' | 'failed' | 'cancelled'
-      ops: unknown[]
-      error: string | null
-      createdAt: Date
-      completedAt: Date | null
-    }
-  >
+  aiRuns: Map<string, AiRunRecord>
 }
 
 const memory: MemoryStore = {
@@ -119,6 +125,7 @@ export class DocumentsService {
       ...doc,
       ydocState: doc.ydocState ? Buffer.from(doc.ydocState) : null,
       pageSettings: mergePageSettings(doc.pageSettings),
+      citationStyle: doc.citationStyle ?? 'apa7',
     }
   }
 
@@ -130,6 +137,7 @@ export class DocumentsService {
       projectId?: string | null
       contentJson?: JSONContent
       pageSettings?: PageSettings
+      citationStyle?: CitationStyle
     },
   ) {
     if (input.projectId) await this.getProject(userId, input.projectId)
@@ -146,6 +154,7 @@ export class DocumentsService {
       contentJson,
       ydocState: null,
       pageSettings,
+      citationStyle: input.citationStyle ?? 'apa7',
       createdAt: now,
       updatedAt: now,
     }
@@ -162,6 +171,7 @@ export class DocumentsService {
         title,
         contentJson,
         pageSettings,
+        citationStyle: record.citationStyle,
       })
       .returning()
     return inserted[0]!
@@ -176,6 +186,7 @@ export class DocumentsService {
       contentJson?: JSONContent
       ydocState?: Buffer | null
       pageSettings?: PageSettings
+      citationStyle?: CitationStyle
     },
   ) {
     const existing = await this.get(userId, id)
@@ -189,6 +200,7 @@ export class DocumentsService {
       pageSettings: patch.pageSettings
         ? mergePageSettings(patch.pageSettings)
         : existing.pageSettings,
+      citationStyle: patch.citationStyle ?? existing.citationStyle,
       updatedAt: new Date(),
     }
     if (!this.database.db) {
@@ -203,6 +215,7 @@ export class DocumentsService {
         contentJson: next.contentJson,
         ydocState: next.ydocState,
         pageSettings: next.pageSettings,
+        citationStyle: next.citationStyle,
         updatedAt: next.updatedAt,
       })
       .where(and(eq(documents.id, id), eq(documents.userId, userId)))
@@ -272,6 +285,7 @@ export class DocumentsService {
       title: `${doc.title} (Copy)`,
       contentJson: doc.contentJson,
       pageSettings: doc.pageSettings,
+      citationStyle: doc.citationStyle,
     })
   }
 
@@ -332,18 +346,22 @@ export class DocumentsService {
     userId: string
     prompt: string
     model: string
+    mode?: 'edit' | 'ask'
   }) {
-    const record = {
+    const record: AiRunRecord = {
       id: randomUUID(),
       documentId: input.documentId,
       userId: input.userId,
       prompt: input.prompt,
       model: input.model,
-      status: 'running' as const,
-      ops: [] as unknown[],
-      error: null as string | null,
+      status: 'running',
+      ops: [],
+      error: null,
+      responseText: null,
+      changes: [],
+      reviewStatus: input.mode === 'ask' ? null : 'pending',
       createdAt: new Date(),
-      completedAt: null as Date | null,
+      completedAt: null,
     }
     if (!this.database.db) {
       memory.aiRuns.set(record.id, record)
@@ -359,6 +377,9 @@ export class DocumentsService {
       status: 'completed' | 'failed' | 'cancelled'
       ops?: unknown[]
       error?: string
+      responseText?: string
+      changes?: unknown[]
+      reviewStatus?: AiRunReviewStatus | null
     },
   ) {
     if (!this.database.db) {
@@ -366,8 +387,12 @@ export class DocumentsService {
       if (!run) return
       memory.aiRuns.set(id, {
         ...run,
-        ...patch,
+        status: patch.status,
         ops: patch.ops ?? run.ops,
+        error: patch.error ?? run.error,
+        responseText: patch.responseText ?? run.responseText,
+        changes: patch.changes ?? run.changes,
+        reviewStatus: patch.reviewStatus === undefined ? run.reviewStatus : patch.reviewStatus,
         completedAt: new Date(),
       })
       return
@@ -378,9 +403,50 @@ export class DocumentsService {
         status: patch.status,
         ops: patch.ops,
         error: patch.error,
+        responseText: patch.responseText,
+        changes: patch.changes,
+        reviewStatus: patch.reviewStatus,
         completedAt: new Date(),
       })
       .where(eq(aiRuns.id, id))
+  }
+
+  async getAiRun(userId: string, documentId: string, runId: string): Promise<AiRunRecord> {
+    const runs = await this.listAiRuns(userId, documentId)
+    const run = runs.find((item) => item.id === runId)
+    if (!run) throw new NotFoundException('AI run not found')
+    return run
+  }
+
+  async reviewAiRun(
+    userId: string,
+    documentId: string,
+    runId: string,
+    input: {
+      outcome: Exclude<AiRunReviewStatus, 'pending'>
+      acceptedChangeIds: string[]
+      changes: unknown[]
+    },
+  ) {
+    const run = await this.getAiRun(userId, documentId, runId)
+    const next: AiRunRecord = {
+      ...run,
+      reviewStatus: input.outcome,
+      changes: input.changes.length > 0 ? input.changes : run.changes,
+    }
+    if (!this.database.db) {
+      memory.aiRuns.set(runId, next)
+      return next
+    }
+    const updated = await this.database.db
+      .update(aiRuns)
+      .set({
+        reviewStatus: input.outcome,
+        changes: next.changes,
+      })
+      .where(eq(aiRuns.id, runId))
+      .returning()
+    return updated[0] ?? next
   }
 
   async listAiRuns(userId: string, documentId: string) {

@@ -3,8 +3,10 @@ import type { TemplateId } from '@docai/shared'
 import {
   DEFAULT_PAGE_SETTINGS,
   mergePageSettings,
+  type CitationStyle,
   type JSONContent,
   type PageSettings,
+  type ProposedChange,
 } from '@docai/document'
 import { createClient } from '@/lib/supabase/client'
 
@@ -14,8 +16,36 @@ export type DocumentRecord = {
   projectId: string | null
   contentJson: unknown
   pageSettings?: PageSettings
+  citationStyle?: CitationStyle
   createdAt: string
   updatedAt: string
+}
+
+export type AiRunRecord = {
+  id: string
+  prompt: string
+  model: string
+  status: string
+  responseText?: string | null
+  reviewStatus?: string | null
+  changes?: unknown[]
+  createdAt: string
+}
+
+export type CitationReportRecord = {
+  style: CitationStyle
+  headingBlockId: string | null
+  entries: Array<{
+    blockId: string
+    text: string
+    surname?: string
+    year?: string
+    doi?: string
+    verification?: { status: string; doi?: string; url?: string }
+  }>
+  inText: Array<{ text: string; surname?: string; year?: string }>
+  orphanCitations: Array<{ text: string; surname?: string; year?: string }>
+  orphanReferences: Array<{ text: string; surname?: string }>
 }
 
 export type FileRecord = {
@@ -87,7 +117,7 @@ export const api = {
     request<DocumentRecord>('/documents', { method: 'POST', body: JSON.stringify(body) }),
   updateDocument: (
     id: string,
-    body: { title?: string; pageSettings?: PageSettings },
+    body: { title?: string; pageSettings?: PageSettings; citationStyle?: CitationStyle },
   ) =>
     request<DocumentRecord>(`/documents/${id}`, {
       method: 'PATCH',
@@ -166,9 +196,48 @@ export const api = {
     return response.json() as Promise<{ text: string }>
   },
   listAiRuns: (documentId: string) =>
-    request<{ id: string; prompt: string; status: string; createdAt: string }[]>(
-      `/documents/${documentId}/ai/runs`,
-    ),
+    request<AiRunRecord[]>(`/documents/${documentId}/ai/runs`),
+  reviewAiRun: (
+    documentId: string,
+    runId: string,
+    body: {
+      outcome: 'accepted' | 'partial' | 'rejected'
+      acceptedChangeIds: string[]
+      changes: ProposedChange[]
+    },
+  ) =>
+    request<AiRunRecord>(`/documents/${documentId}/ai/runs/${runId}/review`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  getAiLog: (documentId: string) =>
+    request<{ contentJson: JSONContent }>(`/documents/${documentId}/ai/log`),
+  exportAiLog: async (documentId: string, format: 'docx' | 'md') => {
+    const response = await fetch(`${API_URL}/documents/${documentId}/ai/log/export?format=${format}`, {
+      headers: await authHeaders(),
+    })
+    if (response.status === 401) {
+      redirectToLogin()
+      throw new Error('Unauthorized')
+    }
+    if (!response.ok) throw new Error(await response.text())
+    const blob = await response.blob()
+    const disposition = response.headers.get('Content-Disposition') ?? ''
+    const match = /filename="([^"]+)"/.exec(disposition)
+    return { blob, filename: match?.[1] ?? `ai-log.${format}` }
+  },
+  createAcknowledgement: (documentId: string, format: 'deakin' | 'usyd') =>
+    request<{ statement: string }>(`/documents/${documentId}/ai/acknowledgement`, {
+      method: 'POST',
+      body: JSON.stringify({ format }),
+    }),
+  getCitationReport: (documentId: string) =>
+    request<CitationReportRecord>(`/documents/${documentId}/citations`),
+  setCitationStyle: (documentId: string, style: CitationStyle) =>
+    request<DocumentRecord>(`/documents/${documentId}/citations/style`, {
+      method: 'POST',
+      body: JSON.stringify({ style }),
+    }),
 }
 
 export type { JSONContent }

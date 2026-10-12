@@ -32,14 +32,39 @@ test('create -> AI generate -> AI modify -> undo', async ({ page }) => {
   await expect(prompt).toBeVisible({ timeout: 30_000 })
   await prompt.fill('Create a short report on solar power')
   await page.getByRole('button', { name: 'Send' }).click()
+  await expect(page.getByRole('heading', { name: 'Review edits' })).toBeVisible({ timeout: 20_000 })
+  await page.getByRole('button', { name: 'Apply selected' }).click()
   await expect(page.getByText(/AI draft|solar|demo/i).first()).toBeVisible({ timeout: 20_000 })
 
   await prompt.fill('Add a comparison table of energy sources')
   await page.getByRole('button', { name: 'Send' }).click()
+  await expect(page.getByRole('heading', { name: 'Review edits' })).toBeVisible({ timeout: 20_000 })
+  await page.getByRole('button', { name: 'Apply selected' }).click()
   await expect(page.getByText(/comparison table|energy sources|AI draft/i).first()).toBeVisible({
     timeout: 20_000,
   })
 
+  await page.keyboard.press('Control+z')
+})
+
+test('AI review can accept one change, reject another, then undo', async ({ page }) => {
+  await signIn(page)
+  await page.getByRole('button', { name: 'New document' }).click()
+  await page.waitForURL(/\/d\//, { timeout: 30_000 })
+  await page.getByRole('button', { name: 'AI', exact: true }).click()
+  const prompt = page.getByPlaceholder('Type or speak your instruction…')
+  await expect(prompt).toBeVisible({ timeout: 30_000 })
+  await prompt.fill('Create a short report on solar power')
+  await page.getByRole('button', { name: 'Send' }).click()
+  await expect(page.getByRole('heading', { name: 'Review edits' })).toBeVisible({ timeout: 20_000 })
+  const acceptBoxes = page.getByRole('checkbox', { name: 'Accept' })
+  await expect(acceptBoxes.first()).toBeVisible()
+  if ((await acceptBoxes.count()) > 1) {
+    await acceptBoxes.nth(1).uncheck()
+  }
+  await page.getByRole('button', { name: 'Apply selected' }).click()
+  await expect(page.getByRole('heading', { name: 'Review edits' })).toHaveCount(0)
+  await expect(page.getByText(/AI draft|solar/i).first()).toBeVisible()
   await page.keyboard.press('Control+z')
 })
 
@@ -58,4 +83,8 @@ test('font, find/replace, page break, and export controls exist', async ({ page 
   await page.getByRole('button', { name: 'Close' }).click()
   await page.getByRole('button', { name: 'File' }).click()
   await expect(page.getByRole('button', { name: 'Download .docx' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'AI activity' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Tools' }).click()
+  await expect(page.getByRole('button', { name: 'Check references' })).toBeVisible()
 })

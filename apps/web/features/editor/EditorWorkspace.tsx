@@ -11,22 +11,29 @@ import { createEditorExtensions } from '@docai/document/extensions'
 import {
   DEFAULT_PAGE_SETTINGS,
   ensureDoc,
-  isBlockNotFoundError,
+  heading,
+  markdownToNodes,
   mergePageSettings,
   type JSONContent,
   type PageSettings,
+  type ProposedChange,
 } from '@docai/document'
 import { STREAM_EVENT } from '@docai/shared'
 import { api, authHeaders, documentPageSettings, getAccessToken } from '@/lib/api'
 import { API_URL, COLLAB_URL } from '@/lib/env'
 import { AiPanel, type ChatItem } from '@/features/ai/AiPanel'
 import { SelectionPrompt } from '@/features/ai/SelectionPrompt'
-import { applyIncomingPatch, shouldReconcile } from './apply-to-editor'
+import { ReferenceReport } from '@/features/citations/ReferenceReport'
+import { ReviewPanel } from '@/features/review/ReviewPanel'
+import { ReviewPreview } from '@/features/review/ReviewPreview'
+import { usePendingReview } from '@/features/review/usePendingReview'
 import type { EditorChrome, EditorDialog } from './chrome'
 import { FindReplaceDialog } from './dialogs/FindReplaceDialog'
 import { LinkDialog } from './dialogs/LinkDialog'
 import { PageSetupDialog } from './dialogs/PageSetupDialog'
 import { SpecialCharactersDialog } from './dialogs/SpecialCharactersDialog'
+import { AcknowledgementDialog } from './dialogs/AcknowledgementDialog'
+import { AiActivityPanel } from './dialogs/AiActivityPanel'
 import { VersionHistoryPanel } from './dialogs/VersionHistoryPanel'
 import { WordCountDialog } from './dialogs/WordCountDialog'
 import { FindReplace } from './findReplace'
@@ -107,6 +114,7 @@ export function EditorWorkspace({ documentId }: { documentId: string }) {
   const abortRef = useRef<AbortController | null>(null)
   const ydocRef = useRef<Y.Doc>(new Y.Doc())
   const undoRef = useRef<Y.UndoManager | null>(null)
+  const review = usePendingReview()
   const providerRef = useRef<HocuspocusProvider | null>(null)
   const paintRef = useRef<PaintSnapshot | null>(null)
   const skipPaintRef = useRef(false)
@@ -217,9 +225,9 @@ export function EditorWorkspace({ documentId }: { documentId: string }) {
     mode: 'edit' | 'ask'
   }) {
     if (!editor) return
+    if (review.pending) return
     setBusy(true)
     editor.setEditable(false)
-    undoRef.current?.stopCapturing()
     const controller = new AbortController()
     abortRef.current = controller
     const userItem: ChatItem = {
@@ -228,9 +236,14 @@ export function EditorWorkspace({ documentId }: { documentId: string }) {
       text: input.instruction,
     }
     setChat((current) => [...current, userItem])
+    const base = editor.getJSON() as JSONContent
+    const reasonsByBlockId: Record<string, string> = {}
     let assistant = ''
-    let outOfSync = false
     let finalDoc: JSONContent | undefined
+    let runId: string | undefined
+    let streamedChanges: ProposedChange[] | undefined
+    let opCount = 0
+    let failedChecks: string[] = []
     try {
       const response = await fetch(`${API_URL}/documents/${documentId}/ai/runs`, {
         method: 'POST',
@@ -239,7 +252,7 @@ export function EditorWorkspace({ documentId }: { documentId: string }) {
           instruction: input.instruction,
           selectionBlockIds: selectedBlockIds(editor),
           fileIds: input.fileIds ?? [],
-          snapshot: editor.getJSON(),
+          snapshot: base,
           mode: input.mode,
         }),
         signal: controller.signal,
@@ -252,29 +265,43 @@ export function EditorWorkspace({ documentId }: { documentId: string }) {
       for await (const event of readSse(response)) {
         const type = String(event.type ?? '')
         if (type === STREAM_EVENT.patch || (type === 'data' && event.dataType === 'patch')) {
-          if (outOfSync) continue
-          try {
-            applyIncomingPatch(editor, event.data, undoRef.current ?? undefined)
-          } catch (error) {
-            if (isBlockNotFoundError(error)) {
-              outOfSync = true
-              continue
-            }
-            throw error
+          const payload = event.data as { affectedBlockIds?: string[]; reason?: string } | undefined
+          for (const blockId of payload?.affectedBlockIds ?? []) {
+            if (payload?.reason) reasonsByBlockId[blockId] = payload.reason
           }
         }
+        if (type === STREAM_EVENT.runStarted || (type === 'data' && event.dataType === 'run-started')) {
+          const data = event.data as { runId?: string } | undefined
+          if (data?.runId) runId = data.runId
+        }
+        if (type === STREAM_EVENT.runSummary || (type === 'data' && event.dataType === 'run-summary')) {
+          const data = event.data as { opCount?: number; failedChecks?: string[]; runId?: string } | undefined
+          opCount = data?.opCount ?? opCount
+          failedChecks = data?.failedChecks ?? failedChecks
+          if (data?.runId) runId = data.runId
+        }
         if (type === STREAM_EVENT.runFinished || (type === 'data' && event.dataType === 'run-finished')) {
-          const data = event.data as { doc?: JSONContent } | undefined
+          const data = event.data as {
+            doc?: JSONContent
+            runId?: string
+            changes?: ProposedChange[]
+            opCount?: number
+          } | undefined
           if (data?.doc) finalDoc = data.doc
+          if (data?.runId) runId = data.runId
+          if (data?.changes) streamedChanges = data.changes
+          if (typeof data?.opCount === 'number') opCount = data.opCount
         }
         if (type === 'text-delta' && typeof event.delta === 'string') {
           assistant += event.delta
         }
         if (typeof event.textDelta === 'string') assistant += event.textDelta
       }
-      if (finalDoc && (outOfSync || shouldReconcile(editor.getJSON() as JSONContent, finalDoc))) {
-        undoRef.current?.stopCapturing()
-        editor.commands.setContent(finalDoc, false)
+      if (input.mode === 'edit' && opCount === 0 && !assistant.toLowerCase().includes('no changes')) {
+        assistant = `${assistant.trim()}\n\nNo changes were made.`.trim()
+      }
+      if (failedChecks.length > 0) {
+        assistant = `${assistant.trim()}\n\nSome edits could not be confirmed: ${failedChecks.join('; ')}`.trim()
       }
       if (assistant.trim()) {
         setChat((current) => [
@@ -282,7 +309,20 @@ export function EditorWorkspace({ documentId }: { documentId: string }) {
           { id: crypto.randomUUID(), role: 'assistant', text: assistant.trim() },
         ])
       }
+      if (input.mode === 'edit' && finalDoc && runId && opCount > 0) {
+        review.start({
+          runId,
+          base,
+          proposed: finalDoc,
+          changes: streamedChanges,
+          reasonsByBlockId,
+        })
+        setShowAiPanel(true)
+      } else {
+        editor.setEditable(true)
+      }
     } catch (error) {
+      editor.setEditable(true)
       if (!(error instanceof DOMException && error.name === 'AbortError')) {
         setChat((current) => [
           ...current,
@@ -294,10 +334,25 @@ export function EditorWorkspace({ documentId }: { documentId: string }) {
         ])
       }
     } finally {
-      undoRef.current?.stopCapturing()
-      editor.setEditable(true)
       setBusy(false)
     }
+  }
+
+  async function applyReview() {
+    if (!editor || !review.pending || !review.composed) return
+    const pending = review.pending
+    undoRef.current?.stopCapturing()
+    if (review.acceptedIds.length > 0) {
+      editor.commands.setContent(review.composed.doc, false)
+    }
+    undoRef.current?.stopCapturing()
+    await api.reviewAiRun(documentId, pending.runId, {
+      outcome: review.outcome,
+      acceptedChangeIds: review.acceptedIds,
+      changes: pending.changes,
+    })
+    review.clear()
+    editor.setEditable(true)
   }
 
   const chrome: EditorChrome = {
@@ -418,20 +473,38 @@ export function EditorWorkspace({ documentId }: { documentId: string }) {
                 background: pageSettings.pageColor,
               }}
             >
-              <SelectionPrompt editor={editor} onAsk={runAi} />
-              <TableMenu editor={editor} />
-              <EditorContent editor={editor} />
+              <div className={review.pending ? 'hidden' : undefined}>
+                <SelectionPrompt editor={editor} onAsk={runAi} />
+                <TableMenu editor={editor} />
+                <EditorContent editor={editor} />
+              </div>
+              {review.preview ? <ReviewPreview doc={review.preview} /> : null}
             </div>
           </div>
-          <AiPanel
-            documentId={documentId}
-            items={chat}
-            busy={busy}
-            visible={showAiPanel}
-            onClose={() => setShowAiPanel(false)}
-            onStop={() => abortRef.current?.abort()}
-            onSubmit={runAi}
-          />
+          {review.pending && showAiPanel ? (
+            <ReviewPanel
+              changes={review.pending.changes}
+              acceptedIds={review.acceptedIds}
+              busy={busy}
+              onToggle={review.toggle}
+              onAcceptAll={review.acceptAll}
+              onRejectAll={review.rejectAll}
+              onApply={() => {
+                void applyReview()
+              }}
+              onClose={() => setShowAiPanel(false)}
+            />
+          ) : (
+            <AiPanel
+              documentId={documentId}
+              items={chat}
+              busy={busy}
+              visible={showAiPanel}
+              onClose={() => setShowAiPanel(false)}
+              onStop={() => abortRef.current?.abort()}
+              onSubmit={runAi}
+            />
+          )}
         </div>
       </div>
       {editor && dialog === 'link' ? <LinkDialog editor={editor} onClose={() => setDialog(null)} /> : null}
@@ -461,6 +534,53 @@ export function EditorWorkspace({ documentId }: { documentId: string }) {
           documentId={documentId}
           onClose={() => setDialog(null)}
           onRestored={() => window.location.reload()}
+        />
+      ) : null}
+      {dialog === 'aiActivity' ? (
+        <AiActivityPanel
+          documentId={documentId}
+          onClose={() => setDialog(null)}
+          onInsertAppendix={async () => {
+            if (!editor) return
+            const log = await api.getAiLog(documentId)
+            const current = editor.getJSON() as JSONContent
+            editor.commands.setContent({
+              type: 'doc',
+              content: [...(current.content ?? []), ...(log.contentJson.content ?? [])],
+            }, false)
+          }}
+        />
+      ) : null}
+      {dialog === 'acknowledgement' ? (
+        <AcknowledgementDialog
+          documentId={documentId}
+          onClose={() => setDialog(null)}
+          onInsert={(statement) => {
+            if (!editor) return
+            const current = editor.getJSON() as JSONContent
+            editor.commands.setContent({
+              type: 'doc',
+              content: [
+                ...(current.content ?? []),
+                heading('AI use acknowledgement', 1),
+                ...markdownToNodes(statement),
+              ],
+            }, false)
+            setDialog(null)
+          }}
+        />
+      ) : null}
+      {dialog === 'references' ? (
+        <ReferenceReport
+          documentId={documentId}
+          onClose={() => setDialog(null)}
+          onFormat={(style) => {
+            setDialog(null)
+            void runAi({
+              instruction: `Format every verified reference in the document to ${style}. Leave unverified entries unchanged and list them.`,
+              mode: 'edit',
+            })
+          }}
         />
       ) : null}
     </div>

@@ -50,7 +50,7 @@ export function AiPanel({
       </div>
       <div className="flex-1 space-y-3 overflow-auto p-4 text-sm">
         {items.length === 0 && (
-          <p className="text-muted">Prompts and answers show up here. The document updates in place.</p>
+          <p className="text-muted">Prompts and answers show up here. Edits wait for your review before they land in the document.</p>
         )}
         {items.map((item) => (
           <div

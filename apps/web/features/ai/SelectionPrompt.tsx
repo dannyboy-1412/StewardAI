@@ -15,7 +15,8 @@ const actions = [
     label: 'Use serif 12pt',
     prompt: 'Restyle the selected text to Georgia 12pt, keeping the existing wording.',
   },
-  { label: 'Add citation', prompt: 'Add a citation to the selected passage using attached files if present.' },
+  { label: 'Add citation', prompt: 'Add a citation to the selected passage using attached files if present. Verify the source first.' },
+  { label: 'Check references', prompt: 'Check every citation in this document, match them to the reference list, and verify each reference. Do not invent sources.' },
   { label: 'Translate', prompt: 'Translate the selected text to English and keep formatting.' },
   { label: 'Explain this', prompt: 'Explain the selected passage.', mode: 'ask' as const },
 ]

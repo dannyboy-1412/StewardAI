@@ -23,6 +23,8 @@ export function MenuBar({ editor, chrome }: { editor: Editor | null; chrome: Edi
         <MenuItem onClick={() => chrome.openDialog('pageSetup')}>Page setup</MenuItem>
         <MenuItem onClick={chrome.print} shortcut="Ctrl+P">Print</MenuItem>
         <MenuItem onClick={() => chrome.openDialog('versions')}>Version history</MenuItem>
+        <MenuItem onClick={() => chrome.openDialog('aiActivity')}>AI activity</MenuItem>
+        <MenuItem onClick={() => chrome.openDialog('acknowledgement')}>AI acknowledgement</MenuItem>
       </Dropdown>
       <Dropdown label="Edit">
         <MenuItem onClick={chrome.onUndo} shortcut="Ctrl+Z">Undo</MenuItem>
@@ -100,6 +102,7 @@ export function MenuBar({ editor, chrome }: { editor: Editor | null; chrome: Edi
       </Dropdown>
       <Dropdown label="Tools">
         <MenuItem onClick={() => chrome.openDialog('wordCount')}>Word count</MenuItem>
+        <MenuItem onClick={() => chrome.openDialog('references')}>Check references</MenuItem>
       </Dropdown>
     </nav>
   )

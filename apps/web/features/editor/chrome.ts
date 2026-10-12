@@ -7,6 +7,9 @@ export type EditorDialog =
   | 'specialChars'
   | 'wordCount'
   | 'versions'
+  | 'aiActivity'
+  | 'acknowledgement'
+  | 'references'
 
 export type EditorChrome = {
   documentId: string
